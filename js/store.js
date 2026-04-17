@@ -85,6 +85,8 @@ const Store = {
       studyDateTo: null,
       scheduleDate: null,
       completedOn: null,
+      acknowledgedBy: '',
+      acknowledgedAt: null,
 
       // Section 8 – Approval
       approvalStatus: '',     // Approved / Not Approved / Hold

@@ -265,6 +265,10 @@ const SCRManager = {
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isImpl = Auth.hasRole('implementation', 'admin');
+    const currentUser = Auth.currentUser();
+    const isAssignedDev = Auth.hasRole('developer', 'admin') &&
+      (scr.assignedDeveloper === currentUser.id || scr.assignedDeveloper2 === currentUser.id);
+    const canAcknowledge = isAssignedDev && scr.currentStage === 5 && !scr.acknowledgedBy && scr.status !== 'Closed';
 
     return `
       <div class="page-header">
@@ -280,6 +284,7 @@ const SCRManager = {
         <div class="flex gap-2">
           ${canEdit ? `<button class="btn btn-ghost" onclick="Router.navigate('scr-create',{id:'${scr.id}'})">✏️ Edit</button>` : ''}
           ${scr.status === 'Closed' ? `<button class="btn btn-ghost" onclick="SCRManager.printSCR('${scr.id}')" title="Print SCR Form">🖨️ Print</button>` : ''}
+          ${canAcknowledge ? `<button class="btn btn-warning" onclick="SCRManager.handleAcknowledge('${scr.id}')">👁 Acknowledge</button>` : ''}
           ${Workflow.canReject(scr) ? `<button class="btn btn-danger btn-sm" onclick="SCRManager.handleRejectStage('${scr.id}')">✕ Reject</button>` : ''}
           ${Workflow.canClose(scr) ? `<button class="btn btn-success" onclick="SCRManager.handleCloseTicket('${scr.id}')">✓ Close Ticket</button>` : ''}
           ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">${Workflow.getAdvanceLabel(scr.currentStage)}</button>` : ''}
@@ -440,6 +445,15 @@ const SCRManager = {
                   <span class="detail-label">Completed On</span>
                   <span class="detail-value">${Utils.formatDate(scr.completedOn)}</span>
                 </div>
+                ${scr.currentStage >= 5 || scr.acknowledgedBy ? `
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">Developer Acknowledgement</span>
+                  <span class="detail-value">
+                    ${scr.acknowledgedBy
+                      ? `${Utils.badgeHtml('Acknowledged', 'success')} &nbsp;${Utils.escapeHtml(Store.getById('users', scr.acknowledgedBy)?.name || '—')} &nbsp;·&nbsp; ${Utils.formatDate(scr.acknowledgedAt)}`
+                      : `${Utils.badgeHtml('Pending', 'warning')} &nbsp;<span class="text-tertiary text-sm">Awaiting developer acknowledgement</span>`}
+                  </span>
+                </div>` : ''}
               </div>
             </div>
           </div>` : ''}
@@ -593,6 +607,34 @@ const SCRManager = {
         Utils.toast('error', 'Error', result.error);
       }
     };
+  },
+
+  // ── Handle developer acknowledgement ───────────────────
+  async handleAcknowledge(scrId) {
+    const confirmed = await Utils.confirm(
+      'Acknowledge Assignment?',
+      'Confirm that you have received and understood this SCR and are ready to begin development.',
+      'primary'
+    );
+    if (!confirmed) return;
+
+    const user = Auth.currentUser();
+    const scr = Store.getById('scr_requests', scrId);
+    Store.update('scr_requests', scrId, {
+      acknowledgedBy: user.id,
+      acknowledgedAt: Utils.nowISO()
+    });
+
+    Audit.log('SCR', scrId, 'Acknowledged', 'acknowledgedBy', null, user.name, user.name, user.role);
+
+    // Notify implementation team and project head
+    const recipients = Store.filter('users', u => u.role === 'implementation' || u.role === 'project_head');
+    recipients.forEach(u => {
+      Notifications.create(u.id, `${scr.scrNumber} acknowledged by developer ${user.name} — development in progress`, 'info', scrId);
+    });
+
+    Utils.toast('success', 'Acknowledged', 'Assignment acknowledged. Team has been notified.');
+    Router.navigate('scr-detail', { id: scrId });
   },
 
   // ── Handle close ticket (Stage 6 QA approval) ──────────
