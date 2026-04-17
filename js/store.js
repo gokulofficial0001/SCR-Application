@@ -202,6 +202,17 @@ const Store = {
       { priority: 'Routine', maxHours: 168 }
     ]);
 
+    // Role Permissions (editable via User Rights module — mirrors Auth.permissions defaults)
+    this._set('role_permissions', {
+      admin:          { pages: ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','master-data','notifications','settings'], actions: ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','reset_data'] },
+      cio:            { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
+      agm_it:         { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
+      project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','view_audit'] },
+      implementation: { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','close_ticket','view_audit'] },
+      developer:      { pages: ['dashboard','scr-list','scr-detail','feedback','notifications'], actions: ['edit_scr','advance_stage'] },
+      requester:      { pages: ['self-service','scr-detail','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
+    });
+
     // Sample SCR Requests (with full 10-section fields)
     const now = new Date();
     const daysAgo = (d) => new Date(now - d * 86400000).toISOString();

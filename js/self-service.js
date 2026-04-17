@@ -11,7 +11,7 @@ const SelfService = {
     return `
       <!-- Welcome Section -->
       <div class="welcome-banner" style="text-align:center">
-        <h2 class="welcome-title" style="max-width:none">Self-Service Portal</h2>
+        <h2 class="welcome-title" style="max-width:none">SOFTWARE CHANGE REQUEST APPLICATION</h2>
         <p class="welcome-text" style="max-width:none;margin:0 auto">Submit new requests, track status, and provide feedback — all in one place</p>
       </div>
 
@@ -69,9 +69,9 @@ const SelfService = {
                 </thead>
                 <tbody>
                   ${mySCRs.map(scr => {
-                    const hasFeedback = Store.filter('feedback', f => f.scrId === scr.id).length > 0;
-                    const needsFeedback = (scr.status === 'Closed' || scr.status === 'Completed') && !hasFeedback;
-                    return `
+      const hasFeedback = Store.filter('feedback', f => f.scrId === scr.id).length > 0;
+      const needsFeedback = (scr.status === 'Closed' || scr.status === 'Completed') && !hasFeedback;
+      return `
                       <tr>
                         <td class="font-semi text-brand">${scr.scrNumber}</td>
                         <td>${Utils.badgeHtml(scr.requestType, 'neutral')}</td>
@@ -86,7 +86,7 @@ const SelfService = {
                         </td>
                       </tr>
                     `;
-                  }).join('')}
+    }).join('')}
                 </tbody>
               </table>
             </div>
@@ -130,7 +130,7 @@ const SelfService = {
                   </div>
                   <div class="form-group">
                     <label class="form-label">Date</label>
-                    <input type="text" class="form-input" value="${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}" readonly style="opacity:0.6">
+                    <input type="text" class="form-input" value="${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}" readonly style="opacity:0.6">
                   </div>
                 </div>
               </div>
@@ -182,18 +182,6 @@ const SelfService = {
                   <label class="form-label">Detailed Description of Change <span class="required">*</span></label>
                   <textarea class="form-textarea" id="quick-desc" rows="4" required placeholder="Explain the change request clearly..."></textarea>
                 </div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Before Scenario</label>
-                    <textarea class="form-textarea" id="quick-before" rows="2" placeholder="Current situation / existing behaviour..."></textarea>
-                    <span class="form-hint">How does it work currently?</span>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">After Scenario</label>
-                    <textarea class="form-textarea" id="quick-after" rows="2" placeholder="Expected behaviour after change..."></textarea>
-                    <span class="form-hint">How should it work after the change?</span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -207,16 +195,6 @@ const SelfService = {
                 <div class="form-group">
                   <label class="form-label">Business Justification</label>
                   <textarea class="form-textarea" id="quick-reason" rows="2" placeholder="Why is this change needed?"></textarea>
-                </div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Problem Being Solved</label>
-                    <textarea class="form-textarea" id="quick-problem" rows="2" placeholder="What problem does this solve?"></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Expected Impact</label>
-                    <textarea class="form-textarea" id="quick-impact" rows="2" placeholder="Quantify the expected outcome..."></textarea>
-                  </div>
                 </div>
               </div>
             </div>
@@ -337,11 +315,7 @@ const SelfService = {
       priority: getVal('quick-intervention'),
       moduleName: getVal('quick-module'),
       description: getVal('quick-desc'),
-      descriptionBefore: getVal('quick-before'),
-      descriptionAfter: getVal('quick-after'),
       reasonForChange: getVal('quick-reason'),
-      problemSolved: getVal('quick-problem'),
-      expectedImpact: getVal('quick-impact'),
       attachments,
       requestedBy: getVal('quick-requested-by'),
       receivedBy: getVal('quick-received-by'),

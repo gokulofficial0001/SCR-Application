@@ -21,6 +21,7 @@ const MasterData = {
         <button class="tab ${this.activeTab === 'departments' ? 'active' : ''}" onclick="MasterData.switchTab('departments', this)">🏢 Departments (${depts.length})</button>
         <button class="tab ${this.activeTab === 'staff' ? 'active' : ''}" onclick="MasterData.switchTab('staff', this)">👥 Staff (${users.length})</button>
         <button class="tab ${this.activeTab === 'sla' ? 'active' : ''}" onclick="MasterData.switchTab('sla', this)">⏱️ SLA Config</button>
+        ${Auth.hasRole('admin') ? `<button class="tab ${this.activeTab === 'user-rights' ? 'active' : ''}" onclick="MasterData.switchTab('user-rights', this)">🔐 User Rights</button>` : ''}
       </div>
 
       <!-- Departments Tab -->
@@ -124,6 +125,13 @@ const MasterData = {
           </div>
         </div>
       </div>
+
+      <!-- User Rights Tab -->
+      ${Auth.hasRole('admin') ? `
+      <div id="master-tab-user-rights" class="${this.activeTab !== 'user-rights' ? 'hidden' : ''}">
+        ${this.renderUserRightsTab()}
+      </div>
+      ` : ''}
     `;
   },
 
@@ -131,7 +139,7 @@ const MasterData = {
     this.activeTab = tab;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (el) el.classList.add('active');
-    ['departments', 'staff', 'sla'].forEach(t => {
+    ['departments', 'staff', 'sla', 'user-rights'].forEach(t => {
       const el = document.getElementById(`master-tab-${t}`);
       if (el) el.classList.toggle('hidden', t !== tab);
     });
@@ -303,6 +311,94 @@ const MasterData = {
     if (confirmed) {
       Store.remove('users', id);
       Utils.toast('success', 'Deleted', 'User removed');
+      Router.navigate('master-data');
+    }
+  },
+
+  // ── User Rights Matrix ──────────────────────────────────
+  renderUserRightsTab() {
+    const savedPerms = Store._get('role_permissions') || Auth.permissions;
+    const roles = ['admin', 'cio', 'agm_it', 'project_head', 'implementation', 'developer', 'requester'];
+    const allPages = ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','master-data','notifications','settings','self-service'];
+    const allActions = ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','reset_data','submit_feedback'];
+    const pageLabels = {
+      'dashboard':'Dashboard','scr-list':'SCR List','scr-detail':'SCR Detail','scr-create':'Create SCR',
+      'approvals':'Approvals','feedback':'Feedback','audit':'Audit Trail','master-data':'Master Data',
+      'notifications':'Notifications','settings':'Settings','self-service':'Self Service Portal'
+    };
+    const actionLabels = {
+      'create_scr':'Create SCR','edit_scr':'Edit SCR','delete_scr':'Delete SCR','assign_scr':'Assign SCR',
+      'advance_stage':'Advance Stage','approve':'Approve','reject':'Reject','hold':'Hold',
+      'close_ticket':'Close Ticket','manage_users':'Manage Users','manage_departments':'Manage Departments',
+      'view_audit':'View Audit','reset_data':'Reset Data','submit_feedback':'Submit Feedback'
+    };
+
+    const roleHeaders = roles.map(r =>
+      `<th class="text-center" style="min-width:88px;font-size:var(--font-xs);line-height:1.3">${Utils.getRoleLabel(r)}</th>`
+    ).join('');
+
+    const mkRows = (keys, labels, type) => keys.map(k => `
+      <tr>
+        <td class="font-medium text-sm" style="white-space:nowrap">${labels[k] || k}</td>
+        ${roles.map(r => `
+          <td class="text-center">
+            <input type="checkbox" class="rights-chk" data-role="${r}" data-type="${type}" data-val="${k}"
+              ${(savedPerms[r]?.[type] || []).includes(k) ? 'checked' : ''}>
+          </td>
+        `).join('')}
+      </tr>`).join('');
+
+    return `
+      <p class="text-tertiary text-sm mb-4">Configure page access and action permissions per role. Changes take effect immediately after saving.</p>
+
+      <div class="card mb-6">
+        <div class="card-header"><h3 class="card-title">Page Access</h3></div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th style="min-width:160px">Page</th>${roleHeaders}</tr></thead>
+            <tbody>${mkRows(allPages, pageLabels, 'pages')}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mb-6">
+        <div class="card-header"><h3 class="card-title">Action Permissions</h3></div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th style="min-width:160px">Action</th>${roleHeaders}</tr></thead>
+            <tbody>${mkRows(allActions, actionLabels, 'actions')}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex gap-3 items-center">
+        <button class="btn btn-primary" onclick="MasterData.saveUserRights()">Save Changes</button>
+        <button class="btn btn-ghost" onclick="MasterData.resetUserRights()">Reset to Defaults</button>
+        <span class="text-sm text-tertiary">Saved to local storage — applies to all active sessions</span>
+      </div>
+    `;
+  },
+
+  saveUserRights() {
+    const roles = ['admin','cio','agm_it','project_head','implementation','developer','requester'];
+    const perms = {};
+    roles.forEach(r => { perms[r] = { pages: [], actions: [] }; });
+
+    document.querySelectorAll('.rights-chk:checked').forEach(chk => {
+      const { role, type, val } = chk.dataset;
+      if (perms[role]) perms[role][type].push(val);
+    });
+
+    Store._set('role_permissions', perms);
+    Audit.log('System', 'role_permissions', 'Updated', 'User Rights', null, 'Role permissions updated');
+    Utils.toast('success', 'Saved', 'User rights updated successfully');
+  },
+
+  async resetUserRights() {
+    const confirmed = await Utils.confirm('Reset Permissions?', 'Restore default permissions for all roles?', 'danger');
+    if (confirmed) {
+      Store._set('role_permissions', Auth.permissions);
+      Utils.toast('success', 'Reset', 'Permissions restored to defaults');
       Router.navigate('master-data');
     }
   },

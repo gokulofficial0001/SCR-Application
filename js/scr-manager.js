@@ -34,12 +34,8 @@ const SCRManager = {
       // Section 3
       moduleName: data.moduleName || '',
       description: data.description,
-      descriptionBefore: data.descriptionBefore || '',
-      descriptionAfter: data.descriptionAfter || '',
       // Section 4
       reasonForChange: data.reasonForChange || '',
-      problemSolved: data.problemSolved || '',
-      expectedImpact: data.expectedImpact || '',
       // Section 5
       attachments: data.attachments || [],
       // Section 6
@@ -283,6 +279,7 @@ const SCRManager = {
         </div>
         <div class="flex gap-2">
           ${canEdit ? `<button class="btn btn-ghost" onclick="Router.navigate('scr-create',{id:'${scr.id}'})">✏️ Edit</button>` : ''}
+          ${scr.status === 'Closed' ? `<button class="btn btn-ghost" onclick="SCRManager.printSCR('${scr.id}')" title="Print SCR Form">🖨️ Print</button>` : ''}
           ${Workflow.canReject(scr) ? `<button class="btn btn-danger btn-sm" onclick="SCRManager.handleRejectStage('${scr.id}')">✕ Reject</button>` : ''}
           ${Workflow.canClose(scr) ? `<button class="btn btn-success" onclick="SCRManager.handleCloseTicket('${scr.id}')">✓ Close Ticket</button>` : ''}
           ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">${Workflow.getAdvanceLabel(scr.currentStage)}</button>` : ''}
@@ -340,22 +337,11 @@ const SCRManager = {
                 <label class="form-label" style="margin-bottom:var(--space-1)">Description</label>
                 <p style="color:var(--color-text-primary);line-height:1.8;white-space:pre-wrap">${Utils.escapeHtml(scr.description || '—')}</p>
               </div>
-              ${scr.descriptionBefore || scr.descriptionAfter ? `
-              <div class="form-row" style="margin-top:var(--space-4)">
-                <div class="form-group">
-                  <label class="form-label" style="color:var(--color-danger-light)">Before Scenario</label>
-                  <p style="color:var(--color-text-secondary);line-height:1.7;font-size:var(--font-sm)">${Utils.escapeHtml(scr.descriptionBefore || '—')}</p>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" style="color:var(--color-success-light)">After Scenario</label>
-                  <p style="color:var(--color-text-secondary);line-height:1.7;font-size:var(--font-sm)">${Utils.escapeHtml(scr.descriptionAfter || '—')}</p>
-                </div>
-              </div>` : ''}
             </div>
           </div>
 
           <!-- SECTION 4: Reason for Change -->
-          ${scr.reasonForChange || scr.problemSolved || scr.expectedImpact ? `
+          ${scr.reasonForChange ? `
           <div class="card">
             <div class="card-header">
               <h3 class="card-title">💡 Reason for Change</h3>
@@ -365,14 +351,6 @@ const SCRManager = {
                 <div class="detail-field" style="grid-column:span 2">
                   <span class="detail-label">Business Justification</span>
                   <span class="detail-value">${Utils.escapeHtml(scr.reasonForChange || '—')}</span>
-                </div>
-                <div class="detail-field">
-                  <span class="detail-label">Problem Being Solved</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.problemSolved || '—')}</span>
-                </div>
-                <div class="detail-field">
-                  <span class="detail-label">Expected Impact</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.expectedImpact || '—')}</span>
                 </div>
               </div>
             </div>
@@ -733,18 +711,6 @@ const SCRManager = {
               <label class="form-label">Detailed Description of Change <span class="required">*</span></label>
               <textarea class="form-textarea" id="scr-desc" rows="4" required placeholder="Explain the overall change request clearly...">${Utils.escapeHtml(scr.description || '')}</textarea>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Before Scenario</label>
-                <textarea class="form-textarea" id="scr-before" rows="3" placeholder="Current situation / existing behaviour...">${Utils.escapeHtml(scr.descriptionBefore || '')}</textarea>
-                <span class="form-hint">Describe the current state before this change</span>
-              </div>
-              <div class="form-group">
-                <label class="form-label">After Scenario</label>
-                <textarea class="form-textarea" id="scr-after" rows="3" placeholder="Expected situation / desired behaviour...">${Utils.escapeHtml(scr.descriptionAfter || '')}</textarea>
-                <span class="form-hint">Describe the expected state after this change</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -758,16 +724,6 @@ const SCRManager = {
             <div class="form-group">
               <label class="form-label">Business Justification</label>
               <textarea class="form-textarea" id="scr-reason" rows="2" placeholder="Why is this change needed? Business impact...">${Utils.escapeHtml(scr.reasonForChange || '')}</textarea>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Problem Being Solved</label>
-                <textarea class="form-textarea" id="scr-problem" rows="2" placeholder="What specific problem does this solve?">${Utils.escapeHtml(scr.problemSolved || '')}</textarea>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Expected Impact</label>
-                <textarea class="form-textarea" id="scr-impact" rows="2" placeholder="Quantify the expected outcome...">${Utils.escapeHtml(scr.expectedImpact || '')}</textarea>
-              </div>
             </div>
           </div>
         </div>
@@ -1121,12 +1077,8 @@ const SCRManager = {
       // Section 3
       moduleName: getVal('scr-module'),
       description: getVal('scr-desc'),
-      descriptionBefore: getVal('scr-before'),
-      descriptionAfter: getVal('scr-after'),
       // Section 4
       reasonForChange: getVal('scr-reason'),
-      problemSolved: getVal('scr-problem'),
-      expectedImpact: getVal('scr-impact'),
       // Section 5
       attachments: this._collectAttachments(),
       // Section 6
@@ -1183,5 +1135,357 @@ const SCRManager = {
     if (!result.success) {
       Utils.toast('error', 'Error', result.error || 'Submission failed');
     }
+  },
+
+  // ── Print SCR as A4 form ────────────────────────────────
+  printSCR(scrId) {
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) return;
+
+    const dev1  = scr.assignedDeveloper  ? Store.getById('users', scr.assignedDeveloper)  : null;
+    const dev2  = scr.assignedDeveloper2 ? Store.getById('users', scr.assignedDeveloper2) : null;
+
+    const approvals   = Store.filter('approvals', a => a.scrId === scrId);
+    const agmDecision = approvals.find(a => a.approverRole === 'agm_it');
+    const cioDecision = approvals.find(a => a.approverRole === 'cio');
+
+    const isApproved  = agmDecision?.decision === 'Approved' && cioDecision?.decision === 'Approved';
+    const isRejected  = agmDecision?.decision === 'Rejected' || cioDecision?.decision === 'Rejected';
+    const chkApproved = isApproved  ? 'checked' : '';
+    const chkRejected = isRejected  ? 'checked' : '';
+    const chkHold     = (!isApproved && !isRejected && (agmDecision || cioDecision)) ? 'checked' : '';
+
+    const esc  = (v) => (v || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') || '—';
+    const fmt  = (d) => d ? Utils.formatDate(d) : '—';
+    const dash = (v) => v || '—';
+
+    // Build 6 attachment slots
+    const attSlots = Array.from({ length: 6 }, (_, i) => {
+      const a = scr.attachments && scr.attachments[i];
+      return `<tr><td class="att-num">${i + 1}.</td><td class="att-val">${a ? esc(a.name) : ''}</td></tr>`;
+    });
+
+    const htmlContent = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>${esc(scr.scrNumber)} — SCR Form</title>
+<style>
+  @page { size: A4 portrait; margin: 15mm 18mm; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #000;
+    background: #fff;
+  }
+
+  /* WATERMARK */
+  body::before {
+    content: 'GKNM HOSPITAL';
+    position: fixed;
+    top: 38%; left: 15%;
+    font-size: 72px;
+    font-weight: bold;
+    color: rgba(0,0,0,0.04);
+    transform: rotate(-35deg);
+    white-space: nowrap;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .hospital-name {
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .hospital-sub {
+    font-size: 11px;
+    color: #444;
+    margin-top: 2px;
+  }
+  .form-title {
+    font-size: 13px;
+    font-weight: bold;
+    background: #000;
+    color: #fff;
+    padding: 4px 0;
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── SECTION HEADING ── */
+  .sec-head {
+    font-size: 11px;
+    font-weight: bold;
+    background: #e8e8e8;
+    border: 1px solid #999;
+    border-bottom: none;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 10px;
+  }
+
+  /* ── FORM TABLE ── */
+  table.form-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  table.form-tbl td {
+    border: 1px solid #999;
+    padding: 5px 7px;
+    vertical-align: top;
+    word-wrap: break-word;
+  }
+  td.lbl {
+    background: #f5f5f5;
+    font-weight: bold;
+    width: 28%;
+    white-space: nowrap;
+    color: #111;
+  }
+  td.val {
+    width: 22%;
+  }
+  td.val-wide {
+    /* used when spanning full width */
+  }
+  td.area {
+    min-height: 44px;
+    height: 44px;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+  td.area-sm {
+    min-height: 30px;
+    height: 30px;
+    white-space: pre-wrap;
+  }
+
+  /* ── ATTACHMENTS ── */
+  table.att-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.att-tbl td { border: 1px solid #999; padding: 4px 6px; }
+  td.att-num { width: 24px; font-weight: bold; background: #f5f5f5; text-align: center; }
+  td.att-val { }
+
+  /* ── APPROVAL CHECKBOXES ── */
+  .approval-checks { padding: 6px 0; }
+  .approval-checks label { margin-right: 28px; font-size: 12px; vertical-align: middle; }
+  .approval-checks input[type=checkbox] { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
+
+  /* ── SIGNATURES ── */
+  table.sign-tbl { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  table.sign-tbl td { width: 33.33%; text-align: center; padding: 0 10px; vertical-align: bottom; }
+  .sign-space { height: 48px; }
+  .sign-line { border-top: 1px solid #000; padding-top: 4px; font-size: 10px; font-weight: bold; }
+
+  /* ── REMARKS TABLE ── */
+  table.rem-tbl { width: 100%; border-collapse: collapse; }
+  table.rem-tbl td { border: 1px solid #999; padding: 5px 7px; vertical-align: top; }
+  td.rem-lbl { background: #f5f5f5; font-weight: bold; width: 28%; white-space: nowrap; }
+  td.rem-val { min-height: 30px; height: 30px; }
+
+  /* ── FOOTER ── */
+  .print-footer {
+    margin-top: 14px;
+    border-top: 1px solid #ccc;
+    padding-top: 6px;
+    font-size: 9.5px;
+    color: #555;
+    line-height: 1.6;
+  }
+
+  /* ── PAGE BREAK CONTROL ── */
+  .no-break { page-break-inside: avoid; }
+</style>
+</head><body>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="hospital-name">GKNM Hospital</div>
+  <div class="hospital-sub">IT Department · Quality &amp; Patient Safety</div>
+  <div class="form-title">SOFTWARE CHANGE REQUEST (SCR) FORM</div>
+</div>
+
+<!-- HEADER INFO -->
+<div class="no-break">
+<table class="form-tbl">
+  <tr>
+    <td class="lbl">SCR Number</td>
+    <td class="val">${esc(scr.scrNumber)}</td>
+    <td class="lbl">Date</td>
+    <td class="val">${fmt(scr.scrDate || scr.createdAt)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Request Type</td>
+    <td class="val">${esc(scr.requestType)}</td>
+    <td class="lbl">Intervention / Priority</td>
+    <td class="val">${esc(scr.intervention || scr.priority)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Module Name</td>
+    <td class="val" colspan="3">${esc(scr.moduleName)}</td>
+  </tr>
+</table>
+</div>
+
+<!-- REQUEST DESCRIPTION -->
+<div class="sec-head">Request Description</div>
+<div class="no-break">
+<table class="form-tbl">
+  <tr>
+    <td class="lbl" style="width:28%">Description</td>
+    <td class="val area" colspan="3">${esc(scr.description)}</td>
+  </tr>
+</table>
+</div>
+
+<!-- REASON FOR CHANGE -->
+<div class="sec-head">Reason for Change</div>
+<div class="no-break">
+<table class="form-tbl">
+  <tr>
+    <td class="lbl">Business Justification</td>
+    <td class="val area" colspan="3">${esc(scr.reasonForChange)}</td>
+  </tr>
+</table>
+</div>
+
+<!-- ATTACHMENTS -->
+<div class="sec-head">Attachments</div>
+<div class="no-break">
+<table class="att-tbl">
+  <tr>
+    ${attSlots.slice(0,3).map(s => s.replace('<tr>','').replace('</tr>','')).join('')}
+  </tr>
+  <tr>
+    ${attSlots.slice(3,6).map(s => s.replace('<tr>','').replace('</tr>','')).join('')}
+  </tr>
+</table>
+</div>
+
+<!-- END USER DETAILS -->
+<div class="sec-head">End User Details</div>
+<div class="no-break">
+<table class="form-tbl">
+  <tr>
+    <td class="lbl">Requested By</td>
+    <td class="val">${esc(scr.requestedBy)}</td>
+    <td class="lbl">Received By</td>
+    <td class="val">${esc(scr.receivedBy)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Coordinated By</td>
+    <td class="val">${esc(scr.coordinatedBy)}</td>
+    <td class="lbl">Department</td>
+    <td class="val">${esc(scr.department)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Department HOD</td>
+    <td class="val" colspan="3">${esc(scr.hodName)}</td>
+  </tr>
+</table>
+</div>
+
+<!-- STUDY DETAILS -->
+<div class="sec-head">Study Details</div>
+<div class="no-break">
+<table class="form-tbl">
+  <tr>
+    <td class="lbl">Study Done By (Primary)</td>
+    <td class="val">${esc(scr.studyDoneByPrimary)}</td>
+    <td class="lbl">Study Done By (Secondary)</td>
+    <td class="val">${esc(scr.studyDoneBySecondary)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Assigned Developer 1</td>
+    <td class="val">${esc(dev1 ? dev1.name : dash(scr.assignedDeveloper))}</td>
+    <td class="lbl">Assigned Developer 2</td>
+    <td class="val">${esc(dev2 ? dev2.name : dash(scr.assignedDeveloper2))}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Assigned On</td>
+    <td class="val">${fmt(scr.assignedOn)}</td>
+    <td class="lbl">Completed On</td>
+    <td class="val">${fmt(scr.completedOn)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Study Date From</td>
+    <td class="val">${fmt(scr.studyDateFrom)}</td>
+    <td class="lbl">Study Date To</td>
+    <td class="val">${fmt(scr.studyDateTo)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Schedule Date</td>
+    <td class="val">${fmt(scr.scheduleDate)}</td>
+    <td class="lbl"></td>
+    <td class="val"></td>
+  </tr>
+</table>
+</div>
+
+<!-- APPROVAL -->
+<div class="sec-head">Approval Decision</div>
+<div class="no-break" style="border:1px solid #999; padding:6px 8px;">
+  <div class="approval-checks">
+    <label><input type="checkbox" ${chkApproved}> Approved</label>
+    <label><input type="checkbox" ${chkRejected}> Not Approved</label>
+    <label><input type="checkbox" ${chkHold}> Hold</label>
+  </div>
+  <!-- Signatures -->
+  <table class="sign-tbl">
+    <tr>
+      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.projectHeadName || 'Project Head')}</div></td>
+      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.agmItName || 'AGM – IT')}</div></td>
+      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.cioName || 'Chief Information Officer')}</div></td>
+    </tr>
+  </table>
+</div>
+
+<!-- REMARKS -->
+<div class="sec-head">Remarks</div>
+<div class="no-break">
+<table class="rem-tbl">
+  <tr>
+    <td class="rem-lbl">Project Head Remarks</td>
+    <td class="rem-val">${esc(scr.remarkProjectHead)}</td>
+  </tr>
+  <tr>
+    <td class="rem-lbl">AGM – IT Remarks</td>
+    <td class="rem-val">${esc(scr.remarkAgmIt || agmDecision?.comments)}</td>
+  </tr>
+  <tr>
+    <td class="rem-lbl">CIO Remarks</td>
+    <td class="rem-val">${esc(scr.remarkCio || cioDecision?.comments)}</td>
+  </tr>
+</table>
+</div>
+
+<!-- FOOTER -->
+<div class="print-footer">
+  <b>NOTE:</b>&nbsp; Request Description: Describe the change clearly. &nbsp;|&nbsp;
+  Reasons: Explain business impact and expected outcome.<br>
+  <i>Behind every system change is a push for better healthcare delivery.</i>
+  &emsp;|&emsp; Printed: ${new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+</div>
+
+</body></html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const win  = window.open(url, '_blank', 'width=900,height=700');
+    win.addEventListener('load', () => {
+      win.focus();
+      setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 400);
+    });
   }
 };
