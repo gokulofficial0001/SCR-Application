@@ -1,0 +1,258 @@
+/* ============================================================
+   SCR MANAGEMENT SYSTEM — Responsive Breakpoints
+   ============================================================ */
+
+/* ── Tablet (≤ 1024px) ─────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .dashboard-kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .dashboard-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .scr-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .audit-entry {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}
+
+/* ── Mobile Large (≤ 768px) ────────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 260px;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+    z-index: var(--z-overlay);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .app-content {
+    margin-left: 0 !important;
+  }
+
+  .header {
+    left: 0 !important;
+    padding: 0 var(--space-4);
+  }
+
+  .content-area {
+    padding: var(--space-4);
+  }
+
+  .dashboard-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal {
+    margin: var(--space-2);
+    max-height: 95vh;
+  }
+
+  .modal.modal-lg,
+  .modal.modal-xl {
+    max-width: calc(100% - var(--space-4));
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .grid-5 {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Table scroll */
+  .data-table {
+    font-size: var(--font-sm);
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .header-title {
+    font-size: var(--font-md);
+  }
+
+  .welcome-banner {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .welcome-title {
+    font-size: var(--font-xl);
+  }
+
+  .tabs {
+    overflow-x: auto;
+  }
+
+  .step-indicator {
+    flex-wrap: wrap;
+  }
+
+  .step-label {
+    display: none;
+  }
+
+  .pipeline {
+    font-size: var(--font-xs);
+  }
+
+  .notif-panel {
+    width: 100%;
+  }
+
+  .toast {
+    min-width: auto;
+    max-width: calc(100vw - var(--space-8));
+  }
+
+  /* Mobile overlay backdrop */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: calc(var(--z-overlay) - 1);
+  }
+
+  .sidebar-backdrop.active {
+    display: block;
+  }
+}
+
+/* ── Mobile Small (≤ 480px) ────────────────────────────────── */
+@media (max-width: 480px) {
+  .dashboard-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-card {
+    padding: var(--space-4);
+  }
+
+  .kpi-value {
+    font-size: var(--font-2xl);
+  }
+
+  .login-card {
+    padding: var(--space-6) var(--space-5);
+  }
+
+  .login-title {
+    font-size: var(--font-xl);
+  }
+
+  .page-title {
+    font-size: var(--font-xl);
+  }
+
+  .btn-lg {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-base);
+  }
+
+  .quick-stats {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .chart-canvas-container {
+    height: 200px;
+  }
+}
+
+/* ── Desktop Large (≥ 1440px) ──────────────────────────────── */
+@media (min-width: 1440px) {
+  .content-area {
+    padding: var(--space-8);
+  }
+
+  .dashboard-kpis {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* ── Print ─────────────────────────────────────────────────── */
+@media print {
+  .sidebar,
+  .header,
+  .toast-container,
+  .sidebar-backdrop,
+  .btn,
+  .notification-btn {
+    display: none !important;
+  }
+
+  .app-content {
+    margin-left: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .card,
+  .kpi-card,
+  .chart-card {
+    background: white;
+    border: 1px solid #ddd;
+    backdrop-filter: none;
+  }
+
+  * {
+    color: black !important;
+  }
+}

@@ -1,0 +1,594 @@
+/* ============================================================
+   SCR MANAGEMENT SYSTEM — Dashboard Styles
+   ============================================================ */
+
+/* ── Dashboard Grid ────────────────────────────────────────── */
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.dashboard-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* ── Chart Containers ──────────────────────────────────────── */
+.chart-card {
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.chart-title {
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-primary);
+}
+
+.chart-canvas-container {
+  position: relative;
+  width: 100%;
+  height: 260px;
+}
+
+.chart-canvas-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Donut chart center */
+.donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.donut-center-value {
+  font-size: var(--font-3xl);
+  font-weight: var(--font-weight-extra);
+  color: var(--color-text-primary);
+}
+
+.donut-center-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Chart legend */
+.chart-legend {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* ── Quick Stats Row ───────────────────────────────────────── */
+.quick-stats {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.quick-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.quick-stat-value {
+  font-size: var(--font-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.quick-stat-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* ── Activity Feed ─────────────────────────────────────────── */
+.activity-feed {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-sm);
+  flex-shrink: 0;
+}
+
+.activity-icon.create { background: var(--color-success-subtle); color: var(--color-success); }
+.activity-icon.update { background: var(--color-primary-subtle); color: var(--color-primary); }
+.activity-icon.approve { background: var(--color-info-subtle); color: var(--color-info); }
+.activity-icon.alert { background: var(--color-warning-subtle); color: var(--color-warning); }
+.activity-icon.close { background: rgba(100,116,139,0.1); color: var(--color-text-secondary); }
+
+.activity-content {
+  flex: 1;
+}
+
+.activity-text {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+.activity-text strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.activity-time {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* ── Overdue List ──────────────────────────────────────────── */
+.overdue-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-subtle);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  margin-bottom: var(--space-2);
+}
+
+.overdue-item .overdue-scr {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-danger-light);
+}
+
+.overdue-item .overdue-dept {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+}
+
+.overdue-item .overdue-time {
+  margin-left: auto;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-danger);
+}
+
+/* ── Developer Workload ────────────────────────────────────── */
+.workload-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.workload-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-info));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  color: white;
+  flex-shrink: 0;
+}
+
+.workload-info {
+  flex: 1;
+}
+
+.workload-name {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.workload-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.workload-count {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-tertiary);
+  min-width: 24px;
+}
+
+/* ── Welcome Banner ────────────────────────────────────────── */
+.welcome-banner {
+  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.1));
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-6);
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-banner::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+  border-radius: var(--radius-full);
+}
+
+.welcome-title {
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.welcome-text {
+  font-size: var(--font-base);
+  color: var(--color-text-secondary);
+  max-width: 600px;
+}
+
+/* ── SCR Detail Page ───────────────────────────────────────── */
+.scr-detail-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-6);
+}
+
+.scr-detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.scr-detail-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detail-label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-value {
+  font-size: var(--font-base);
+  color: var(--color-text-primary);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+/* ── Multi-step form ───────────────────────────────────────── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+.step-dot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semi);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  border: 2px solid var(--color-border);
+  transition: all var(--transition-base);
+}
+
+.step-dot.active .step-number {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.step-dot.completed .step-number {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: white;
+}
+
+.step-label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.step-dot.active .step-label {
+  color: var(--color-primary-light);
+}
+
+.step-dot.completed .step-label {
+  color: var(--color-success);
+}
+
+.step-line {
+  width: 40px;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.step-line.completed {
+  background: var(--color-success);
+}
+
+/* ── Feedback Score Display ────────────────────────────────── */
+.feedback-score-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-extra);
+  margin: 0 auto var(--space-3);
+}
+
+.feedback-score-circle.excellent {
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+  border: 2px solid var(--color-success);
+}
+
+.feedback-score-circle.good {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
+
+.feedback-score-circle.average {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  border: 2px solid var(--color-warning);
+}
+
+.feedback-score-circle.poor {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  border: 2px solid var(--color-danger);
+}
+
+/* ── Approval Card ─────────────────────────────────────────── */
+.approval-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg-base);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
+}
+
+.approval-status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-lg);
+  flex-shrink: 0;
+}
+
+.approval-status-icon.approved {
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.approval-status-icon.rejected {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.approval-status-icon.hold {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.approval-status-icon.pending {
+  background: rgba(100,116,139,0.1);
+  color: var(--color-text-muted);
+}
+
+.approval-info {
+  flex: 1;
+}
+
+.approval-role {
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-primary);
+}
+
+.approval-name {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.approval-comment {
+  font-size: var(--font-sm);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-deep);
+  border-radius: var(--radius-md);
+  font-style: italic;
+}
+
+.approval-time {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ── Master Data Table Actions ─────────────────────────────── */
+.action-cell {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* ── Audit Log ─────────────────────────────────────────────── */
+.audit-entry {
+  display: grid;
+  grid-template-columns: 140px 100px 1fr 120px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-sm);
+  align-items: center;
+}
+
+.audit-timestamp {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  font-family: monospace;
+}
+
+.audit-action-badge {
+  font-size: var(--font-xs);
+}
+
+.audit-description {
+  color: var(--color-text-secondary);
+}
+
+.audit-user {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-xs);
+  text-align: right;
+}
+
+/* ── SLA indicator ─────────────────────────────────────────── */
+.sla-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.sla-indicator.on-track {
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.sla-indicator.at-risk {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.sla-indicator.breached {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  animation: pulse 2s infinite;
+}
+
+/* ── Self-Service Quick Track ──────────────────────────────── */
+.track-result {
+  background: var(--glass-bg-light);
+  border: var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-top: var(--space-4);
+  animation: fadeInUp 0.3s ease;
+}
+
+.track-scr-number {
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-light);
+  margin-bottom: var(--space-2);
+}

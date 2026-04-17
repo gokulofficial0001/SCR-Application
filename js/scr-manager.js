@@ -1,0 +1,1103 @@
+/* ============================================================
+   SCR MANAGEMENT SYSTEM — SCR Request Manager
+   ============================================================ */
+
+const SCRManager = {
+  // ── Current filters state ───────────────────────────────
+  filters: {
+    search: '',
+    status: 'all',
+    priority: 'all',
+    department: 'all'
+  },
+
+  // ── Create SCR ──────────────────────────────────────────
+  createSCR(data) {
+    const user = Auth.currentUser();
+    const scrNumber = Utils.generateSCRNumber();
+
+    // Duplicate detection
+    const existing = Store.getAll('scr_requests');
+    const dupes = existing.filter(s => 
+      s.status !== 'Closed' && s.status !== 'Rejected' && 
+      Utils.similarity(s.description, data.description) > 0.5
+    );
+
+    const scr = Store.add('scr_requests', {
+      // Section 1
+      scrNumber,
+      scrDate: Utils.today(),
+      // Section 2
+      requestType: data.requestType,
+      intervention: data.intervention || data.priority || '',
+      priority: data.intervention || data.priority || '',
+      // Section 3
+      moduleName: data.moduleName || '',
+      description: data.description,
+      descriptionBefore: data.descriptionBefore || '',
+      descriptionAfter: data.descriptionAfter || '',
+      // Section 4
+      reasonForChange: data.reasonForChange || '',
+      problemSolved: data.problemSolved || '',
+      expectedImpact: data.expectedImpact || '',
+      // Section 5
+      attachments: data.attachments || [],
+      // Section 6
+      requestedBy: data.requestedBy || user.name,
+      receivedBy: data.receivedBy || '',
+      coordinatedBy: data.coordinatedBy || '',
+      department: data.department,
+      hodName: data.hodName || '',
+      // Section 7
+      studyDoneByPrimary: data.studyDoneByPrimary || '',
+      studyDoneBySecondary: data.studyDoneBySecondary || '',
+      assignedDeveloper: data.assignedDeveloper || '',
+      assignedDeveloper2: data.assignedDeveloper2 || '',
+      assignedOn: data.assignedOn || null,
+      studyDateFrom: data.studyDateFrom || null,
+      studyDateTo: data.studyDateTo || null,
+      scheduleDate: data.scheduleDate || null,
+      completedOn: data.completedOn || null,
+      // Section 8
+      approvalStatus: data.approvalStatus || '',
+      approvalReason: data.approvalReason || '',
+      projectHeadName: data.projectHeadName || '',
+      agmItName: data.agmItName || '',
+      cioName: data.cioName || '',
+      // Section 9
+      remarkProjectHead: data.remarkProjectHead || '',
+      remarkAgmIt: data.remarkAgmIt || '',
+      remarkCio: data.remarkCio || '',
+      // System
+      assignedTeam: data.assignedTeam || '',
+      currentStage: 1,
+      status: 'Open',
+      createdBy: user.id
+    });
+
+    // Create initial workflow entry
+    Store.add('workflow_stages', {
+      scrId: scr.id,
+      stage: 1,
+      enteredAt: Utils.nowISO(),
+      exitedAt: null,
+      performedBy: user.id,
+      action: 'Submitted',
+      notes: 'SCR submitted by ' + user.name
+    });
+
+    // Audit
+    Audit.log('SCR', scr.id, 'Created', null, null, scrNumber);
+
+    // Notifications
+    Notifications.notifySCRCreated(scr);
+
+    return { success: true, scr, duplicates: dupes };
+  },
+
+  // ── Update SCR ──────────────────────────────────────────
+  updateSCR(id, updates) {
+    const old = Store.getById('scr_requests', id);
+    if (!old) return { success: false, error: 'SCR not found' };
+
+    const scr = Store.update('scr_requests', id, updates);
+
+    // Track field changes
+    Object.keys(updates).forEach(field => {
+      if (old[field] !== updates[field] && !['updatedAt'].includes(field)) {
+        Audit.log('SCR', id, 'Updated', field, old[field], updates[field]);
+      }
+    });
+
+    // If developer assigned, notify
+    if (updates.assignedDeveloper && updates.assignedDeveloper !== old.assignedDeveloper) {
+      Notifications.notifySCRAssigned(scr);
+    }
+
+    return { success: true, scr };
+  },
+
+  // ── Get filtered SCRs ──────────────────────────────────
+  getFiltered() {
+    let scrs = Store.getAll('scr_requests');
+    const { search, status, priority, department } = this.filters;
+
+    if (search) {
+      const q = search.toLowerCase();
+      scrs = scrs.filter(s => 
+        s.scrNumber.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.department.toLowerCase().includes(q)
+      );
+    }
+    if (status !== 'all') scrs = scrs.filter(s => s.status === status);
+    if (priority !== 'all') scrs = scrs.filter(s => s.priority === priority);
+    if (department !== 'all') scrs = scrs.filter(s => s.department === department);
+
+    // Role-based filtering for requester
+    const user = Auth.currentUser();
+    if (user.role === 'requester') {
+      scrs = scrs.filter(s => s.createdBy === user.id);
+    }
+
+    return scrs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  // ── Render SCR List ─────────────────────────────────────
+  renderList() {
+    const scrs = this.getFiltered();
+    const depts = Store.getAll('departments');
+
+    return `
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2 class="page-title">SCR Requests</h2>
+          <p class="page-description">Manage all software change requests</p>
+        </div>
+        ${Auth.canPerformAction('create_scr') ? `
+          <button class="btn btn-primary" onclick="Router.navigate('scr-create')">
+            + New SCR
+          </button>
+        ` : ''}
+      </div>
+
+      <div class="filter-bar">
+        <div class="search-bar" style="flex:1;max-width:300px">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="form-input" id="scr-search" placeholder="Search SCRs..." 
+            value="${Utils.escapeHtml(this.filters.search)}" oninput="SCRManager.handleFilter()">
+        </div>
+        <select class="form-select" id="filter-status" style="width:140px" onchange="SCRManager.handleFilter()">
+          <option value="all">All Status</option>
+          <option value="Open" ${this.filters.status === 'Open' ? 'selected' : ''}>Open</option>
+          <option value="In Progress" ${this.filters.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+          <option value="Completed" ${this.filters.status === 'Completed' ? 'selected' : ''}>Completed</option>
+          <option value="On Hold" ${this.filters.status === 'On Hold' ? 'selected' : ''}>On Hold</option>
+          <option value="Closed" ${this.filters.status === 'Closed' ? 'selected' : ''}>Closed</option>
+          <option value="Rejected" ${this.filters.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
+        </select>
+        <select class="form-select" id="filter-priority" style="width:140px" onchange="SCRManager.handleFilter()">
+          <option value="all">All Priority</option>
+          <option value="Emergency" ${this.filters.priority === 'Emergency' ? 'selected' : ''}>Emergency</option>
+          <option value="Urgent" ${this.filters.priority === 'Urgent' ? 'selected' : ''}>Urgent</option>
+          <option value="Routine" ${this.filters.priority === 'Routine' ? 'selected' : ''}>Routine</option>
+        </select>
+        <select class="form-select" id="filter-dept" style="width:160px" onchange="SCRManager.handleFilter()">
+          <option value="all">All Departments</option>
+          ${depts.map(d => `<option value="${Utils.escapeHtml(d.name)}" ${this.filters.department === d.name ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+        </select>
+        <span class="text-sm text-tertiary">${scrs.length} results</span>
+      </div>
+
+      ${scrs.length === 0 ? `
+        <div class="empty-state">
+          <div class="empty-state-icon">📋</div>
+          <h3 class="empty-state-title">No SCRs Found</h3>
+          <p class="empty-state-text">Try adjusting your filters or create a new SCR</p>
+          ${Auth.canPerformAction('create_scr') ? `
+            <button class="btn btn-primary mt-4" onclick="Router.navigate('scr-create')">+ New SCR</button>
+          ` : ''}
+        </div>
+      ` : `
+        <div class="table-container">
+          <table class="data-table" id="scr-table">
+            <thead>
+              <tr>
+                <th class="sortable">SCR #</th>
+                <th>Type</th>
+                <th class="sortable">Priority</th>
+                <th>Department</th>
+                <th>Description</th>
+                <th>Stage</th>
+                <th class="sortable">Status</th>
+                <th>SLA</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scrs.map(scr => {
+                const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
+                return `
+                  <tr style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">
+                    <td><span class="font-semi text-brand">${scr.scrNumber}</span></td>
+                    <td>${Utils.badgeHtml(scr.requestType, 'neutral')}</td>
+                    <td>${Utils.priorityBadge(scr.priority)}</td>
+                    <td class="text-sm">${Utils.escapeHtml(scr.department)}</td>
+                    <td class="text-sm" style="max-width:250px">${Utils.escapeHtml(Utils.truncate(scr.description, 60))}</td>
+                    <td><span class="text-xs text-tertiary">${Utils.getStageName(scr.currentStage)}</span></td>
+                    <td>${Utils.statusBadge(scr.status)}</td>
+                    <td>${SLAEngine.renderIndicator(scr)}</td>
+                    <td class="text-sm text-tertiary">${Utils.formatDate(scr.createdAt)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    `;
+  },
+
+  postRenderList() {
+    // Any post-render setup
+  },
+
+  // ── Filter handler ──────────────────────────────────────
+  handleFilter() {
+    this.filters.search = document.getElementById('scr-search')?.value || '';
+    this.filters.status = document.getElementById('filter-status')?.value || 'all';
+    this.filters.priority = document.getElementById('filter-priority')?.value || 'all';
+    this.filters.department = document.getElementById('filter-dept')?.value || 'all';
+    Router.navigate('scr-list');
+  },
+
+  // ── Render SCR Detail ──────────────────────────────────
+  renderDetail(id) {
+    const scr = Store.getById('scr_requests', id);
+    if (!scr) {
+      return `<div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <h3 class="empty-state-title">SCR Not Found</h3>
+        <button class="btn btn-primary mt-4" onclick="Router.navigate('scr-list')">Back to List</button>
+      </div>`;
+    }
+
+    const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
+    const dev2 = scr.assignedDeveloper2 ? Store.getById('users', scr.assignedDeveloper2) : null;
+    const creator = Store.getById('users', scr.createdBy);
+    const canEdit = Auth.canPerformAction('edit_scr') && scr.status !== 'Closed' && scr.status !== 'Rejected';
+    const canAdvance = Workflow.canAdvance(scr);
+    const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
+    const isApprover = Auth.hasRole('project_head', 'agm_it', 'cio', 'admin');
+    const isImpl = Auth.hasRole('implementation', 'it_coordinator', 'admin');
+
+    return `
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="flex items-center gap-3">
+            <button class="btn btn-ghost btn-sm" onclick="Router.navigate('scr-list')">← Back</button>
+            <h2 class="page-title">${scr.scrNumber}</h2>
+            ${Utils.priorityBadge(scr.intervention || scr.priority)}
+            ${Utils.statusBadge(scr.status)}
+          </div>
+          <p class="page-description">${Utils.escapeHtml(scr.department)} · Created ${Utils.formatDate(scr.createdAt)}</p>
+        </div>
+        <div class="flex gap-2">
+          ${canEdit ? `<button class="btn btn-ghost" onclick="Router.navigate('scr-create',{id:'${scr.id}'})">✏️ Edit</button>` : ''}
+          ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">&#x23ED; Advance Stage</button>` : ''}
+        </div>
+      </div>
+
+      <!-- Pipeline -->
+      <div class="card mb-4">
+        ${Workflow.renderPipeline(scr)}
+        ${SLAEngine.renderProgressBar(scr)}
+      </div>
+
+      <div class="scr-detail-grid">
+        <!-- Main Column -->
+        <div class="scr-detail-main">
+
+          <!-- SECTION 1+2: Header & Project Details -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📋 SCR Header & Project Details</h3>
+            </div>
+            <div class="card-body">
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <span class="detail-label">SCR Number</span>
+                  <span class="detail-value font-bold text-brand">${Utils.escapeHtml(scr.scrNumber)}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Date</span>
+                  <span class="detail-value">${Utils.formatDate(scr.scrDate || scr.createdAt)}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Request Type</span>
+                  <span class="detail-value">${Utils.badgeHtml(scr.requestType, 'neutral')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Intervention</span>
+                  <span class="detail-value">${Utils.priorityBadge(scr.intervention || scr.priority)}</span>
+                </div>
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">Module Name</span>
+                  <span class="detail-value font-semi">${Utils.escapeHtml(scr.moduleName || '—')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 3: Request Description -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📝 Request Description</h3>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label" style="margin-bottom:var(--space-1)">Description</label>
+                <p style="color:var(--color-text-primary);line-height:1.8;white-space:pre-wrap">${Utils.escapeHtml(scr.description || '—')}</p>
+              </div>
+              ${scr.descriptionBefore || scr.descriptionAfter ? `
+              <div class="form-row" style="margin-top:var(--space-4)">
+                <div class="form-group">
+                  <label class="form-label" style="color:var(--color-danger-light)">Before Scenario</label>
+                  <p style="color:var(--color-text-secondary);line-height:1.7;font-size:var(--font-sm)">${Utils.escapeHtml(scr.descriptionBefore || '—')}</p>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="color:var(--color-success-light)">After Scenario</label>
+                  <p style="color:var(--color-text-secondary);line-height:1.7;font-size:var(--font-sm)">${Utils.escapeHtml(scr.descriptionAfter || '—')}</p>
+                </div>
+              </div>` : ''}
+            </div>
+          </div>
+
+          <!-- SECTION 4: Reason for Change -->
+          ${scr.reasonForChange || scr.problemSolved || scr.expectedImpact ? `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">💡 Reason for Change</h3>
+            </div>
+            <div class="card-body">
+              <div class="detail-grid">
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">Business Justification</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.reasonForChange || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Problem Being Solved</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.problemSolved || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Expected Impact</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.expectedImpact || '—')}</span>
+                </div>
+              </div>
+            </div>
+          </div>` : ''}
+
+          <!-- SECTION 5: Attachments -->
+          ${scr.attachments && scr.attachments.length > 0 ? `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📎 Attachments (${scr.attachments.length})</h3>
+            </div>
+            <div class="card-body">
+              <ol style="padding-left:var(--space-4);color:var(--color-text-secondary)">
+                ${scr.attachments.map(a => `<li style="margin-bottom:var(--space-2);font-size:var(--font-sm)">${Utils.escapeHtml(a.name)}</li>`).join('')}
+              </ol>
+            </div>
+          </div>` : ''}
+
+          <!-- SECTION 6: End User Details -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">👤 End User Details</h3>
+            </div>
+            <div class="card-body">
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <span class="detail-label">Requested By</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.requestedBy || (creator ? creator.name : '—'))}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Received By</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.receivedBy || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Coordinated By</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.coordinatedBy || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Department</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.department)}</span>
+                </div>
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">Department HOD</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.hodName || '—')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 7: Study Details -->
+          ${isImpl || scr.studyDoneByPrimary ? `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">🔬 Study Details</h3>
+            </div>
+            <div class="card-body">
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <span class="detail-label">Study Done By (Primary)</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.studyDoneByPrimary || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Study Done By (Secondary)</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.studyDoneBySecondary || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Developer 1</span>
+                  <span class="detail-value">${dev ? Utils.escapeHtml(dev.name) : '—'}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Developer 2</span>
+                  <span class="detail-value">${dev2 ? Utils.escapeHtml(dev2.name) : '—'}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Assigned On</span>
+                  <span class="detail-value">${Utils.formatDate(scr.assignedOn)}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Study Date From – To</span>
+                  <span class="detail-value">${Utils.formatDate(scr.studyDateFrom)} – ${Utils.formatDate(scr.studyDateTo)}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Schedule Date</span>
+                  <span class="detail-value">${Utils.formatDate(scr.scheduleDate)}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">Completed On</span>
+                  <span class="detail-value">${Utils.formatDate(scr.completedOn)}</span>
+                </div>
+              </div>
+            </div>
+          </div>` : ''}
+
+          <!-- SECTION 8+9: Approval & Remarks -->
+          ${isApprover || scr.approvalStatus ? `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">✅ Approvals & Remarks</h3>
+            </div>
+            <div class="card-body">
+              ${scr.approvalStatus ? `
+              <div class="scr-approval-decision ${scr.approvalStatus === 'Approved' ? 'approved' : scr.approvalStatus === 'Not Approved' ? 'rejected' : 'hold'}" style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-lg);margin-bottom:var(--space-4);background:${scr.approvalStatus === 'Approved' ? 'var(--color-success-subtle)' : scr.approvalStatus === 'Not Approved' ? 'var(--color-danger-subtle)' : 'var(--color-warning-subtle)'}">
+                <span style="font-size:1.5rem">${scr.approvalStatus === 'Approved' ? '✅' : scr.approvalStatus === 'Not Approved' ? '❌' : '⏸️'}</span>
+                <div>
+                  <div class="font-bold" style="color:${scr.approvalStatus === 'Approved' ? 'var(--color-success-light)' : scr.approvalStatus === 'Not Approved' ? 'var(--color-danger-light)' : 'var(--color-warning-light)'};font-size:var(--font-md)">${scr.approvalStatus}</div>
+                  ${scr.approvalReason ? `<div class="text-sm text-secondary">${Utils.escapeHtml(scr.approvalReason)}</div>` : ''}
+                </div>
+              </div>` : ''}
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <span class="detail-label">Project Head</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.projectHeadName || '—')}</span>
+                </div>
+                <div class="detail-field">
+                  <span class="detail-label">AGM – IT</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.agmItName || '—')}</span>
+                </div>
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">CIO</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.cioName || '—')}</span>
+                </div>
+              </div>
+              ${scr.remarkProjectHead || scr.remarkAgmIt || scr.remarkCio ? `
+              <div style="margin-top:var(--space-4);border-top:var(--glass-border);padding-top:var(--space-4)">
+                <p class="font-semi text-secondary mb-3">Remarks</p>
+                ${scr.remarkProjectHead ? `<div class="mb-3"><span class="form-label" style="margin-bottom:2px">Project Head</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkProjectHead)}</p></div>` : ''}
+                ${scr.remarkAgmIt ? `<div class="mb-3"><span class="form-label" style="margin-bottom:2px">AGM – IT</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkAgmIt)}</p></div>` : ''}
+                ${scr.remarkCio ? `<div><span class="form-label" style="margin-bottom:2px">CIO</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkCio)}</p></div>` : ''}
+              </div>` : ''}
+              ${Approval.renderForSCR(scr.id)}
+            </div>
+          </div>` : `
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">✅ Approvals</h3></div>
+            <div class="card-body">${Approval.renderForSCR(scr.id)}</div>
+          </div>`}
+
+          <!-- Feedback -->
+          ${scr.status === 'Closed' || scr.status === 'Completed' ? `
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">⭐ Feedback</h3>
+              </div>
+              <div class="card-body">
+                ${hasFeedback ? Feedback.renderForSCR(scr.id) : `
+                  <p class="text-tertiary mb-4">No feedback submitted yet</p>
+                  ${Auth.canPerformAction('submit_feedback') || Auth.hasRole('admin', 'requester') ? `
+                    <button class="btn btn-outline" onclick="Feedback.showForm('${scr.id}')">&#x2B50; Submit Feedback</button>
+                  ` : ''}
+                `}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Section 10: Footer -->
+          <div class="scr-detail-footer-note">
+            <span style="font-size:1.5rem">🏥</span>
+            <p>"Behind every system change is a push for better healthcare delivery."</p>
+          </div>
+        </div>
+
+        <!-- Sidebar Column -->
+        <div class="scr-detail-sidebar">
+          <!-- Workflow History -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">🔄 Workflow</h3>
+            </div>
+            <div class="card-body">
+              ${Workflow.renderHistory(scr.id)}
+            </div>
+          </div>
+
+          <!-- Activity Timeline -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📜 Activity</h3>
+            </div>
+            <div class="card-body">
+              ${Audit.renderTimeline(scr.id)}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // ── Handle advance stage ────────────────────────────────
+  async handleAdvanceStage(scrId) {
+    const scr = Store.getById('scr_requests', scrId);
+    const nextStage = scr.currentStage + 1;
+    const confirmed = await Utils.confirm(
+      'Advance Stage?',
+      `Move to "${Utils.getStageName(nextStage)}"?`
+    );
+    if (!confirmed) return;
+
+    const result = Workflow.advanceStage(scrId);
+    if (result.success) {
+      Utils.toast('success', 'Stage Advanced', `Moved to ${Utils.getStageName(result.newStage)}`);
+      Router.navigate('scr-detail', { id: scrId });
+    } else {
+      Utils.toast('error', 'Cannot Advance', result.error);
+    }
+  },
+
+  // ── Render Create/Edit Form (10-Section role-based) ─────
+  renderForm(editId) {
+    const isEdit = !!editId;
+    const scr = isEdit ? Store.getById('scr_requests', editId) : {};
+    const user = Auth.currentUser();
+    const depts = Store.getAll('departments');
+    const devs = Store.filter('users', u => u.role === 'developer');
+    const impTeam = Store.filter('users', u => u.role === 'implementation' || u.role === 'it_coordinator');
+
+    // Role visibility flags
+    const isRequester = Auth.hasRole('requester');
+    const isImpl = Auth.hasRole('implementation', 'it_coordinator', 'admin');
+    const isApprover = Auth.hasRole('project_head', 'agm_it', 'cio', 'admin');
+    const isAdmin = Auth.hasRole('admin');
+
+    // Pre-fill end user from current user if requester
+    const defaultRequestedBy = scr.requestedBy || (isRequester ? user.name : '');
+    const defaultDept = scr.department || (isRequester ? user.department : '');
+    // Pre-fill study primary from current user if implementation team
+    const defaultStudyPrimary = scr.studyDoneByPrimary || (isImpl && !isAdmin ? user.name : '');
+
+    return `
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="flex items-center gap-3">
+            <button class="btn btn-ghost btn-sm" onclick="Router.navigate('scr-list')">← Back</button>
+            <h2 class="page-title">${isEdit ? `Edit ${scr.scrNumber}` : 'New SCR Request'}</h2>
+          </div>
+          <p class="page-description">${isEdit ? 'Update SCR details' : 'Submit a new software change request'}</p>
+        </div>
+      </div>
+
+      <form id="scr-form" onsubmit="SCRManager.handleSubmit(event, '${editId || ''}')" style="max-width:900px">
+
+        <!-- ━━━━━━ SECTION 1: HEADER ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">1</span>
+            <span>Header</span>
+            <span class="scr-section-badge">SOFTWARE CHANGE REQUEST (SCR) FORM</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">SCR Number</label>
+                <input type="text" class="form-input" value="${isEdit ? Utils.escapeHtml(scr.scrNumber) : 'Auto-generated on submit'}" readonly style="opacity:0.7">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date</label>
+                <input type="text" class="form-input" value="${Utils.formatDate(isEdit ? scr.scrDate : Utils.today())}" readonly style="opacity:0.7">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 2: PROJECT DETAILS ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">2</span>
+            <span>Project Details</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Request Type <span class="required">*</span></label>
+                <select class="form-select" id="scr-type" required ${isEdit && !Auth.canPerformAction('edit_scr') ? 'disabled' : ''}>
+                  <option value="">Select type...</option>
+                  <option value="New" ${scr.requestType === 'New' ? 'selected' : ''}>New Development</option>
+                  <option value="Modification" ${scr.requestType === 'Modification' ? 'selected' : ''}>Modification</option>
+                  <option value="Report" ${scr.requestType === 'Report' ? 'selected' : ''}>Report</option>
+                  <option value="Other" ${scr.requestType === 'Other' ? 'selected' : ''}>Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Intervention <span class="required">*</span></label>
+                <select class="form-select" id="scr-intervention" required>
+                  <option value="">Select intervention...</option>
+                  <option value="Emergency" ${(scr.intervention||scr.priority) === 'Emergency' ? 'selected' : ''}>🔴 Emergency</option>
+                  <option value="Urgent" ${(scr.intervention||scr.priority) === 'Urgent' ? 'selected' : ''}>🟡 Urgent</option>
+                  <option value="Routine" ${(scr.intervention||scr.priority) === 'Routine' ? 'selected' : ''}>🔵 Routine</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 3: REQUEST DESCRIPTION ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">3</span>
+            <span>Request Description</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-group">
+              <label class="form-label">Module Name <span class="required">*</span></label>
+              <input type="text" class="form-input" id="scr-module" value="${Utils.escapeHtml(scr.moduleName || '')}" placeholder="e.g., Billing System, OPD Module, LIS Integration" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Detailed Description of Change <span class="required">*</span></label>
+              <textarea class="form-textarea" id="scr-desc" rows="4" required placeholder="Explain the overall change request clearly...">${Utils.escapeHtml(scr.description || '')}</textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Before Scenario</label>
+                <textarea class="form-textarea" id="scr-before" rows="3" placeholder="Current situation / existing behaviour...">${Utils.escapeHtml(scr.descriptionBefore || '')}</textarea>
+                <span class="form-hint">Describe the current state before this change</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">After Scenario</label>
+                <textarea class="form-textarea" id="scr-after" rows="3" placeholder="Expected situation / desired behaviour...">${Utils.escapeHtml(scr.descriptionAfter || '')}</textarea>
+                <span class="form-hint">Describe the expected state after this change</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 4: REASON FOR CHANGE ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">4</span>
+            <span>Reason for Change</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-group">
+              <label class="form-label">Business Justification</label>
+              <textarea class="form-textarea" id="scr-reason" rows="2" placeholder="Why is this change needed? Business impact...">${Utils.escapeHtml(scr.reasonForChange || '')}</textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Problem Being Solved</label>
+                <textarea class="form-textarea" id="scr-problem" rows="2" placeholder="What specific problem does this solve?">${Utils.escapeHtml(scr.problemSolved || '')}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Expected Impact</label>
+                <textarea class="form-textarea" id="scr-impact" rows="2" placeholder="Quantify the expected outcome...">${Utils.escapeHtml(scr.expectedImpact || '')}</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 5: ATTACHMENTS ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">5</span>
+            <span>Attachments</span>
+            <span class="scr-section-hint">Up to 6 files</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div id="attachments-container">
+              ${this._renderAttachmentSlots(scr.attachments || [])}
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="SCRManager.addAttachmentSlot()">+ Add Attachment</button>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 6: END USER DETAILS ━━━━━━ -->
+        <div class="scr-form-section">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num">6</span>
+            <span>End User Details</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Requested By <span class="required">*</span></label>
+                <input type="text" class="form-input" id="scr-requested-by" value="${Utils.escapeHtml(defaultRequestedBy)}" placeholder="Full name of requester" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Received By</label>
+                <input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Coordinated By</label>
+                <input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Department Name <span class="required">*</span></label>
+                <select class="form-select" id="scr-dept" required onchange="SCRManager.onDeptChange()">
+                  <option value="">Select department...</option>
+                  ${depts.map(d => `<option value="${Utils.escapeHtml(d.name)}" ${(defaultDept === d.name) ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="max-width:400px">
+              <label class="form-label">Department HOD</label>
+              <input type="text" class="form-input" id="scr-hod" value="${Utils.escapeHtml(scr.hodName || '')}" readonly placeholder="Auto-filled from department">
+              <span class="form-hint">Auto-fetched when department is selected</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ━━━━━━ SECTION 7: STUDY DETAILS (Implementation Team) ━━━━━━ -->
+        ${isImpl ? `
+        <div class="scr-form-section scr-section-impl">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num impl">7</span>
+            <span>Study Details</span>
+            <span class="scr-section-role-badge">Implementation Team</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Study Done By (Primary)</label>
+                <select class="form-select" id="scr-study-primary">
+                  <option value="">Select primary analyst...</option>
+                  ${impTeam.map(u => `<option value="${Utils.escapeHtml(u.name)}" ${(defaultStudyPrimary === u.name) ? 'selected' : ''}>${Utils.escapeHtml(u.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Done By (Secondary)</label>
+                <select class="form-select" id="scr-study-secondary">
+                  <option value="">Select secondary analyst...</option>
+                  ${impTeam.map(u => `<option value="${Utils.escapeHtml(u.name)}" ${scr.studyDoneBySecondary === u.name ? 'selected' : ''}>${Utils.escapeHtml(u.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 1</label>
+                <select class="form-select" id="scr-developer">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 2</label>
+                <select class="form-select" id="scr-developer2">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Assigned On</label>
+                <input type="date" class="form-input" id="scr-assigned-on" value="${scr.assignedOn || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Date From</label>
+                <input type="date" class="form-input" id="scr-study-from" value="${scr.studyDateFrom || ''}">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Study Date To</label>
+                <input type="date" class="form-input" id="scr-study-to" value="${scr.studyDateTo || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Schedule Date</label>
+                <input type="date" class="form-input" id="scr-schedule" value="${scr.scheduleDate || ''}">
+              </div>
+            </div>
+            <div class="form-group" style="max-width:400px">
+              <label class="form-label">Completed On</label>
+              <input type="date" class="form-input" id="scr-completed-on" value="${scr.completedOn || ''}">
+            </div>
+            <!-- Duplicate check -->
+            <div id="duplicate-warning" class="hidden" style="background:var(--color-warning-subtle);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-lg);padding:var(--space-4);">
+              <p class="font-semi text-warning mb-2">⚠️ Possible Duplicates Detected</p>
+              <div id="duplicate-list"></div>
+            </div>
+          </div>
+        </div>
+        ` : `<input type="hidden" id="scr-developer" value="${Utils.escapeHtml(scr.assignedDeveloper || '')}">
+             <input type="hidden" id="scr-developer2" value="${Utils.escapeHtml(scr.assignedDeveloper2 || '')}">`}
+
+        <!-- ━━━━━━ SECTION 8: APPROVAL SECTION (Approvers) ━━━━━━ -->
+        ${isApprover ? `
+        <div class="scr-form-section scr-section-approval">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num approval">8</span>
+            <span>Approval Section</span>
+            <span class="scr-section-role-badge approval">Approvers Only</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-group">
+              <label class="form-label">Approval Decision</label>
+              <div class="approval-radio-group">
+                <label class="approval-radio-option">
+                  <input type="radio" name="scr-approval" value="Approved" ${scr.approvalStatus === 'Approved' ? 'checked' : ''}>
+                  <span class="approval-radio-inner approved">✓ Approved</span>
+                </label>
+                <label class="approval-radio-option">
+                  <input type="radio" name="scr-approval" value="Not Approved" ${scr.approvalStatus === 'Not Approved' ? 'checked' : ''}>
+                  <span class="approval-radio-inner rejected">✕ Not Approved</span>
+                </label>
+                <label class="approval-radio-option">
+                  <input type="radio" name="scr-approval" value="Hold" ${scr.approvalStatus === 'Hold' ? 'checked' : ''}>
+                  <span class="approval-radio-inner hold">⏸ Hold</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reason for Decision</label>
+              <textarea class="form-textarea" id="scr-approval-reason" rows="2" placeholder="Explain the approval decision...">${Utils.escapeHtml(scr.approvalReason || '')}</textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Project Head Name</label>
+                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || '')}" placeholder="Project Head full name">
+              </div>
+              <div class="form-group">
+                <label class="form-label">AGM – IT Name</label>
+                <input type="text" class="form-input" id="scr-agm-name" value="${Utils.escapeHtml(scr.agmItName || '')}" placeholder="AGM IT full name">
+              </div>
+            </div>
+            <div class="form-group" style="max-width:400px">
+              <label class="form-label">CIO Name</label>
+              <input type="text" class="form-input" id="scr-cio-name" value="${Utils.escapeHtml(scr.cioName || '')}" placeholder="CIO full name">
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- ━━━━━━ SECTION 9: REMARKS (Approvers) ━━━━━━ -->
+        ${isApprover ? `
+        <div class="scr-form-section scr-section-approval">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num approval">9</span>
+            <span>Remarks</span>
+            <span class="scr-section-role-badge approval">Approvers Only</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-group">
+              <label class="form-label">Project Head Remarks</label>
+              <textarea class="form-textarea" id="scr-remark-ph" rows="2" placeholder="Project Head remarks..." ${!Auth.hasRole('project_head','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkProjectHead || '')}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">AGM – IT Remarks</label>
+              <textarea class="form-textarea" id="scr-remark-agm" rows="2" placeholder="AGM IT remarks..." ${!Auth.hasRole('agm_it','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkAgmIt || '')}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">CIO Remarks</label>
+              <textarea class="form-textarea" id="scr-remark-cio" rows="2" placeholder="CIO remarks..." ${!Auth.hasRole('cio','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkCio || '')}</textarea>
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- ━━━━━━ SECTION 10: FOOTER ━━━━━━ -->
+        <div class="scr-form-footer-note">
+          <span class="scr-footer-icon">🏥</span>
+          <p>"Behind every system change is a push for better healthcare delivery."</p>
+        </div>
+
+        <!-- Submit / Save -->
+        <div class="flex justify-between items-center mt-6">
+          <button type="button" class="btn btn-ghost" onclick="Router.navigate('scr-list')">← Cancel</button>
+          <button type="submit" class="btn btn-success btn-lg" id="scr-submit-btn">
+            ${isEdit ? '💾 Update SCR' : '📋 Submit SCR'}
+          </button>
+        </div>
+
+      </form>
+    `;
+  },
+
+  // ── Attachment slot renderer ─────────────────────────────
+  _renderAttachmentSlots(attachments) {
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const att = attachments[i] || { name: '', url: '' };
+      slots.push(`
+        <div class="attachment-slot" id="att-slot-${i}">
+          <span class="att-slot-num">${i + 1}.</span>
+          <input type="text" class="form-input att-name" id="att-name-${i}" value="${Utils.escapeHtml(att.name)}" placeholder="Attachment description / filename" style="flex:1">
+          ${i >= (attachments.length || 0) ? `<button type="button" class="btn btn-ghost btn-sm" onclick="SCRManager.removeAttachmentSlot(${i})" style="color:var(--color-danger);padding:0 var(--space-2)">✕</button>` : ''}
+        </div>
+      `);
+    }
+    // Only show filled slots + 1 empty
+    const filled = attachments.length;
+    return slots.slice(0, Math.min(filled + 1, 6)).join('');
+  },
+
+  _attachmentCount: 1,
+
+  addAttachmentSlot() {
+    const container = document.getElementById('attachments-container');
+    if (!container) return;
+    const existing = container.querySelectorAll('.attachment-slot').length;
+    if (existing >= 6) { Utils.toast('warning', 'Max Attachments', 'You can attach up to 6 files'); return; }
+    const i = existing;
+    const slot = document.createElement('div');
+    slot.className = 'attachment-slot';
+    slot.id = `att-slot-${i}`;
+    slot.innerHTML = `
+      <span class="att-slot-num">${i + 1}.</span>
+      <input type="text" class="form-input att-name" id="att-name-${i}" placeholder="Attachment description / filename" style="flex:1">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="SCRManager.removeAttachmentSlot(${i})" style="color:var(--color-danger);padding:0 var(--space-2)">✕</button>
+    `;
+    container.appendChild(slot);
+  },
+
+  removeAttachmentSlot(i) {
+    document.getElementById(`att-slot-${i}`)?.remove();
+  },
+
+  _collectAttachments() {
+    const slots = document.querySelectorAll('.att-name');
+    const result = [];
+    slots.forEach(s => { if (s.value.trim()) result.push({ name: s.value.trim(), url: '' }); });
+    return result;
+  },
+
+  postRenderForm() {
+    // Auto-fill HOD if dept is pre-selected
+    this.onDeptChange();
+  },
+
+  // ── Department change handler ───────────────────────────
+  onDeptChange() {
+    const deptName = document.getElementById('scr-dept')?.value;
+    const hodField = document.getElementById('scr-hod');
+    if (deptName && hodField) {
+      const dept = Store.getAll('departments').find(d => d.name === deptName);
+      if (dept) hodField.value = dept.hodName;
+    }
+  },
+
+  // ── Duplicate check ─────────────────────────────────────
+  checkDuplicates() {
+    const desc = document.getElementById('scr-desc')?.value;
+    if (!desc) return;
+
+    const existing = Store.filter('scr_requests', s => s.status !== 'Closed' && s.status !== 'Rejected');
+    const dupes = existing.filter(s => Utils.similarity(s.description, desc) > 0.4);
+
+    const warning = document.getElementById('duplicate-warning');
+    const list = document.getElementById('duplicate-list');
+    if (dupes.length > 0 && warning && list) {
+      warning.classList.remove('hidden');
+      list.innerHTML = dupes.map(d => `
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-medium text-brand">${d.scrNumber}</span>
+          <span class="text-xs text-secondary">${Utils.truncate(d.description, 50)}</span>
+          ${Utils.statusBadge(d.status)}
+        </div>
+      `).join('');
+    }
+  },
+
+  // ── Form submit ─────────────────────────────────────────
+  handleSubmit(e, editId) {
+    e.preventDefault();
+
+    const getVal = (id) => document.getElementById(id)?.value || '';
+    const getRadio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
+
+    const data = {
+      // Section 2
+      requestType: getVal('scr-type'),
+      intervention: getVal('scr-intervention'),
+      priority: getVal('scr-intervention'),
+      // Section 3
+      moduleName: getVal('scr-module'),
+      description: getVal('scr-desc'),
+      descriptionBefore: getVal('scr-before'),
+      descriptionAfter: getVal('scr-after'),
+      // Section 4
+      reasonForChange: getVal('scr-reason'),
+      problemSolved: getVal('scr-problem'),
+      expectedImpact: getVal('scr-impact'),
+      // Section 5
+      attachments: this._collectAttachments(),
+      // Section 6
+      requestedBy: getVal('scr-requested-by'),
+      receivedBy: getVal('scr-received-by'),
+      coordinatedBy: getVal('scr-coordinated-by'),
+      department: getVal('scr-dept'),
+      hodName: getVal('scr-hod'),
+      // Section 7 (impl team only)
+      studyDoneByPrimary: getVal('scr-study-primary'),
+      studyDoneBySecondary: getVal('scr-study-secondary'),
+      assignedDeveloper: getVal('scr-developer'),
+      assignedDeveloper2: getVal('scr-developer2'),
+      assignedOn: getVal('scr-assigned-on') || null,
+      studyDateFrom: getVal('scr-study-from') || null,
+      studyDateTo: getVal('scr-study-to') || null,
+      scheduleDate: getVal('scr-schedule') || null,
+      completedOn: getVal('scr-completed-on') || null,
+      // Section 8 (approvers)
+      approvalStatus: getRadio('scr-approval'),
+      approvalReason: getVal('scr-approval-reason'),
+      projectHeadName: getVal('scr-ph-name'),
+      agmItName: getVal('scr-agm-name'),
+      cioName: getVal('scr-cio-name'),
+      // Section 9
+      remarkProjectHead: getVal('scr-remark-ph'),
+      remarkAgmIt: getVal('scr-remark-agm'),
+      remarkCio: getVal('scr-remark-cio'),
+    };
+
+    // Validate required
+    if (!data.requestType || !data.intervention || !data.department || !data.description || !data.moduleName || !data.requestedBy) {
+      Utils.toast('error', 'Validation Error', 'Please fill all required fields (Request Type, Intervention, Module, Description, Department, Requested By)');
+      return;
+    }
+
+    let result;
+    if (editId) {
+      result = this.updateSCR(editId, data);
+      if (result.success) {
+        Utils.toast('success', 'SCR Updated', `${result.scr.scrNumber} has been updated`);
+        Router.navigate('scr-detail', { id: editId });
+      }
+    } else {
+      result = this.createSCR(data);
+      if (result.success) {
+        let msg = `${result.scr.scrNumber} created successfully`;
+        if (result.duplicates.length > 0) msg += ` (${result.duplicates.length} possible duplicates found)`;
+        Utils.toast('success', 'SCR Created', msg);
+        Router.navigate('scr-detail', { id: result.scr.id });
+      }
+    }
+
+    if (!result.success) {
+      Utils.toast('error', 'Error', result.error || 'Submission failed');
+    }
+  }
+};
