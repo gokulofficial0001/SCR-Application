@@ -216,7 +216,6 @@ const SCRManager = {
             </thead>
             <tbody>
               ${scrs.map(scr => {
-                const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
                 return `
                   <tr style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">
                     <td><span class="font-semi text-brand">${scr.scrNumber}</span></td>
@@ -268,8 +267,8 @@ const SCRManager = {
     const canEdit = Auth.canPerformAction('edit_scr') && scr.status !== 'Closed' && scr.status !== 'Rejected';
     const canAdvance = Workflow.canAdvance(scr);
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
-    const isApprover = Auth.hasRole('project_head', 'agm_it', 'cio', 'admin');
-    const isImpl = Auth.hasRole('implementation', 'it_coordinator', 'admin');
+    const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
+    const isImpl = Auth.hasRole('implementation', 'admin');
 
     return `
       <div class="page-header">
@@ -284,7 +283,9 @@ const SCRManager = {
         </div>
         <div class="flex gap-2">
           ${canEdit ? `<button class="btn btn-ghost" onclick="Router.navigate('scr-create',{id:'${scr.id}'})">✏️ Edit</button>` : ''}
-          ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">&#x23ED; Advance Stage</button>` : ''}
+          ${Workflow.canReject(scr) ? `<button class="btn btn-danger btn-sm" onclick="SCRManager.handleRejectStage('${scr.id}')">✕ Reject</button>` : ''}
+          ${Workflow.canClose(scr) ? `<button class="btn btn-success" onclick="SCRManager.handleCloseTicket('${scr.id}')">✓ Close Ticket</button>` : ''}
+          ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">${Workflow.getAdvanceLabel(scr.currentStage)}</button>` : ''}
         </div>
       </div>
 
@@ -465,8 +466,8 @@ const SCRManager = {
             </div>
           </div>` : ''}
 
-          <!-- SECTION 8+9: Approval & Remarks -->
-          ${isApprover || scr.approvalStatus ? `
+          <!-- SECTION 8+9: Management Approval (Stage 4 only) -->
+          ${(isApprover && scr.currentStage === 4) || scr.approvalStatus ? `
           <div class="card">
             <div class="card-header">
               <h3 class="card-title">✅ Approvals & Remarks</h3>
@@ -563,10 +564,7 @@ const SCRManager = {
   async handleAdvanceStage(scrId) {
     const scr = Store.getById('scr_requests', scrId);
     const nextStage = scr.currentStage + 1;
-    const confirmed = await Utils.confirm(
-      'Advance Stage?',
-      `Move to "${Utils.getStageName(nextStage)}"?`
-    );
+    const confirmed = await Utils.confirm('Advance Stage?', `Move to "${Utils.getStageName(nextStage)}"?`);
     if (!confirmed) return;
 
     const result = Workflow.advanceStage(scrId);
@@ -578,6 +576,61 @@ const SCRManager = {
     }
   },
 
+  // ── Handle reject / return stage ────────────────────────
+  async handleRejectStage(scrId) {
+    const scr = Store.getById('scr_requests', scrId);
+    const targetStage = Workflow._rejectTarget[scr.currentStage];
+    const targetLabel = targetStage ? `return to "${Utils.getStageName(targetStage)}"` : 'reject this SCR (terminal)';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal modal-sm">
+        <div class="modal-body" style="padding:var(--space-6)">
+          <h4 style="margin-bottom:var(--space-2)">Reject & ${targetStage ? 'Return' : 'Close'}</h4>
+          <p class="text-secondary text-sm mb-4">This will ${targetLabel}. Remarks are required.</p>
+          <div class="form-group">
+            <label class="form-label">Remarks <span class="required">*</span></label>
+            <textarea id="reject-remarks" class="form-textarea" rows="3" placeholder="Explain the reason for rejection..."></textarea>
+          </div>
+          <div class="flex gap-3 justify-end mt-4">
+            <button class="btn btn-ghost" id="reject-cancel">Cancel</button>
+            <button class="btn btn-danger" id="reject-confirm">Confirm Rejection</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#reject-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#reject-confirm').onclick = () => {
+      const remarks = document.getElementById('reject-remarks').value.trim();
+      overlay.remove();
+      const result = Workflow.rejectStage(scrId, remarks);
+      if (result.success) {
+        const msg = result.terminal ? 'SCR has been rejected' : `Returned to ${Utils.getStageName(result.targetStage)}`;
+        Utils.toast(result.terminal ? 'error' : 'warning', 'Rejected', msg);
+        Router.navigate('scr-detail', { id: scrId });
+      } else {
+        Utils.toast('error', 'Error', result.error);
+      }
+    };
+  },
+
+  // ── Handle close ticket (Stage 6 QA approval) ──────────
+  async handleCloseTicket(scrId) {
+    const confirmed = await Utils.confirm('Close Ticket?', 'Mark this SCR as verified and closed?', 'warning');
+    if (!confirmed) return;
+
+    const result = Workflow.closeTicket(scrId);
+    if (result.success) {
+      Utils.toast('success', 'Ticket Closed', 'SCR has been verified and closed successfully');
+      Router.navigate('scr-detail', { id: scrId });
+    } else {
+      Utils.toast('error', 'Error', result.error);
+    }
+  },
+
   // ── Render Create/Edit Form (10-Section role-based) ─────
   renderForm(editId) {
     const isEdit = !!editId;
@@ -585,12 +638,13 @@ const SCRManager = {
     const user = Auth.currentUser();
     const depts = Store.getAll('departments');
     const devs = Store.filter('users', u => u.role === 'developer');
-    const impTeam = Store.filter('users', u => u.role === 'implementation' || u.role === 'it_coordinator');
+    const impTeam = Store.filter('users', u => u.role === 'implementation');
 
     // Role visibility flags
     const isRequester = Auth.hasRole('requester');
-    const isImpl = Auth.hasRole('implementation', 'it_coordinator', 'admin');
-    const isApprover = Auth.hasRole('project_head', 'agm_it', 'cio', 'admin');
+    const isImpl = Auth.hasRole('implementation', 'admin');
+    const isPH = Auth.hasRole('project_head', 'admin');
+    const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isAdmin = Auth.hasRole('admin');
 
     // Pre-fill end user from current user if requester
@@ -771,7 +825,7 @@ const SCRManager = {
           </div>
         </div>
 
-        <!-- ━━━━━━ SECTION 7: STUDY DETAILS (Implementation Team) ━━━━━━ -->
+        <!-- ━━━━━━ SECTION 7: STUDY DETAILS (Implementation Team) / DEVELOPER ASSIGNMENT (Project Head) ━━━━━━ -->
         ${isImpl ? `
         <div class="scr-form-section scr-section-impl">
           <div class="scr-form-section-title">
@@ -843,8 +897,38 @@ const SCRManager = {
             </div>
           </div>
         </div>
+        ` : isPH ? `
+        <div class="scr-form-section scr-section-impl">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num impl">7</span>
+            <span>Developer Assignment</span>
+            <span class="scr-section-role-badge">Project Head</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 1 <span class="required">*</span></label>
+                <select class="form-select" id="scr-developer">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 2</label>
+                <select class="form-select" id="scr-developer2">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <input type="hidden" id="scr-study-primary" value="${Utils.escapeHtml(scr.studyDoneByPrimary || '')}">
+            <input type="hidden" id="scr-study-secondary" value="${Utils.escapeHtml(scr.studyDoneBySecondary || '')}">
+          </div>
+        </div>
         ` : `<input type="hidden" id="scr-developer" value="${Utils.escapeHtml(scr.assignedDeveloper || '')}">
-             <input type="hidden" id="scr-developer2" value="${Utils.escapeHtml(scr.assignedDeveloper2 || '')}">`}
+             <input type="hidden" id="scr-developer2" value="${Utils.escapeHtml(scr.assignedDeveloper2 || '')}">
+             <input type="hidden" id="scr-study-primary" value="">
+             <input type="hidden" id="scr-study-secondary" value="">`}
 
         <!-- ━━━━━━ SECTION 8: APPROVAL SECTION (Approvers) ━━━━━━ -->
         ${isApprover ? `

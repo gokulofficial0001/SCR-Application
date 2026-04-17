@@ -181,7 +181,6 @@ const Store = {
       { id: 'user_cio', name: 'Dr. Venkatesh R', username: 'cio', password: 'cio123', role: 'cio', email: 'venkatesh@hospital.in', department: 'IT Department' },
       { id: 'user_agm', name: 'Mr. Prasad Kumar', username: 'agm', password: 'agm123', role: 'agm_it', email: 'prasad@hospital.in', department: 'IT Department' },
       { id: 'user_ph', name: 'Ms. Deepa S', username: 'projecthead', password: 'ph123', role: 'project_head', email: 'deepa@hospital.in', department: 'IT Department' },
-      { id: 'user_itc', name: 'Mr. Ravi Shankar', username: 'coordinator', password: 'itc123', role: 'it_coordinator', email: 'ravi@hospital.in', department: 'IT Department' },
       { id: 'user_impl', name: 'Mr. Arjun M', username: 'impl', password: 'impl123', role: 'implementation', email: 'arjun@hospital.in', department: 'IT Department' },
       { id: 'user_impl2', name: 'Mr. Suresh Kumar', username: 'impl2', password: 'impl123', role: 'implementation', email: 'suresh@hospital.in', department: 'IT Department' },
       { id: 'user_dev1', name: 'Ms. Preethi N', username: 'developer', password: 'dev123', role: 'developer', email: 'preethi@hospital.in', department: 'IT Department' },
@@ -274,7 +273,7 @@ const Store = {
         remarkAgmIt: 'Verified and approved by AGM-IT.',
         remarkCio: 'Final approval granted. Well done team.',
         assignedTeam: 'Development', attachments: [],
-        currentStage: 7, status: 'Completed',
+        currentStage: 6, status: 'Closed',
         createdBy: 'user_req3', createdAt: daysAgo(22), updatedAt: daysAgo(5)
       },
       {
@@ -321,7 +320,7 @@ const Store = {
         remarkAgmIt: 'Verified and approved.',
         remarkCio: 'Final approval granted.',
         assignedTeam: 'Development', attachments: [],
-        currentStage: 7, status: 'Closed',
+        currentStage: 6, status: 'Closed',
         createdBy: 'user_req1', createdAt: daysAgo(32), updatedAt: daysAgo(8)
       },
       {
@@ -437,39 +436,40 @@ const Store = {
 
     // Workflow stages for sample SCRs
     const workflowData = [];
+    const stageActors = { 1: 'user_impl', 2: 'user_impl', 3: 'user_ph', 4: 'user_agm', 5: 'user_dev1', 6: 'user_impl' };
     sampleSCRs.forEach(scr => {
-      for (let s = 1; s <= scr.currentStage; s++) {
+      for (let s = 1; s <= Math.min(scr.currentStage, 6); s++) {
         workflowData.push({
           id: Utils.generateId(),
           scrId: scr.id,
           stage: s,
           enteredAt: daysAgo(22 - s * 2),
           exitedAt: s < scr.currentStage ? daysAgo(22 - (s + 1) * 2) : null,
-          performedBy: s <= 2 ? 'user_itc' : 'user_ph',
-          action: s < scr.currentStage ? 'Advanced' : 'In Progress',
+          performedBy: stageActors[s] || 'user_impl',
+          action: s < scr.currentStage ? 'Completed' : (scr.status === 'Closed' ? 'Closed' : 'In Progress'),
           notes: `Stage ${s} processed`
         });
       }
     });
     this._set('workflow_stages', workflowData);
 
-    // Sample approvals
+    // Sample approvals — Stage 4 (Management Approval: AGM + CIO both required)
     const approvals = [
       {
-        id: 'appr_1', scrId: 'scr_5', approverRole: 'project_head', approverName: 'Ms. Deepa S',
-        decision: 'Approved', comments: 'Good implementation. Approved for deployment.', timestamp: daysAgo(9)
+        id: 'appr_1', scrId: 'scr_5', approverRole: 'agm_it', approverName: 'Mr. Prasad Kumar',
+        decision: 'Approved', comments: 'Verified and approved.', timestamp: daysAgo(9)
       },
       {
-        id: 'appr_2', scrId: 'scr_5', approverRole: 'agm_it', approverName: 'Mr. Prasad Kumar',
-        decision: 'Approved', comments: 'Verified and approved.', timestamp: daysAgo(8)
-      },
-      {
-        id: 'appr_3', scrId: 'scr_5', approverRole: 'cio', approverName: 'Dr. Venkatesh R',
+        id: 'appr_2', scrId: 'scr_5', approverRole: 'cio', approverName: 'Dr. Venkatesh R',
         decision: 'Approved', comments: 'Final approval granted. Well done team.', timestamp: daysAgo(8)
       },
       {
-        id: 'appr_4', scrId: 'scr_3', approverRole: 'project_head', approverName: 'Ms. Deepa S',
-        decision: 'Approved', comments: 'Report format looks good. Approved.', timestamp: daysAgo(5)
+        id: 'appr_3', scrId: 'scr_3', approverRole: 'agm_it', approverName: 'Mr. Prasad Kumar',
+        decision: 'Approved', comments: 'Report requirements met. Approved.', timestamp: daysAgo(5)
+      },
+      {
+        id: 'appr_4', scrId: 'scr_3', approverRole: 'cio', approverName: 'Dr. Venkatesh R',
+        decision: 'Approved', comments: 'Approved. Good work.', timestamp: daysAgo(5)
       }
     ];
     this._set('approvals', approvals);
@@ -487,7 +487,7 @@ const Store = {
     // Sample audit log
     const auditLog = [
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Ramesh Kumar', role: 'requester', timestamp: daysAgo(10) },
-      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Stage Advanced', field: 'currentStage', oldValue: '1', newValue: '2', performedBy: 'Mr. Ravi Shankar', role: 'it_coordinator', timestamp: daysAgo(9) },
+      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Stage Advanced', field: 'currentStage', oldValue: 'Requirement Submission', newValue: 'Implementation Review', performedBy: 'Mr. Arjun M', role: 'implementation', timestamp: daysAgo(9) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_2', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Priya Sharma', role: 'requester', timestamp: daysAgo(14) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Approved', field: 'decision', oldValue: null, newValue: 'Approved', performedBy: 'Dr. Venkatesh R', role: 'cio', timestamp: daysAgo(8) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Status Changed', field: 'status', oldValue: 'Completed', newValue: 'Closed', performedBy: 'System', role: 'admin', timestamp: daysAgo(8) },
@@ -499,11 +499,12 @@ const Store = {
 
     // Notifications
     const notifications = [
-      { id: 'notif_1', userId: 'user_dev1', message: 'You have been assigned SCR-2026-0001 (Emergency)', type: 'assignment', read: false, timestamp: daysAgo(1), scrId: 'scr_1' },
-      { id: 'notif_2', userId: 'user_ph', message: 'SCR-2026-0009 has reached Completion stage', type: 'status', read: false, timestamp: daysAgo(1), scrId: 'scr_9' },
-      { id: 'notif_3', userId: 'user_cio', message: 'SCR-2026-0003 is awaiting your approval', type: 'approval', read: false, timestamp: daysAgo(5), scrId: 'scr_3' },
-      { id: 'notif_4', userId: 'user_admin', message: 'SLA breach: SCR-2026-0002 is overdue', type: 'sla', read: false, timestamp: daysAgo(0), scrId: 'scr_2' },
-      { id: 'notif_5', userId: 'user_itc', message: 'New SCR submitted: SCR-2026-0008 from Pediatrics', type: 'new_scr', read: true, timestamp: daysAgo(3), scrId: 'scr_8' }
+      { id: 'notif_1', userId: 'user_dev1', message: 'You have been assigned SCR-2026-0001 (Emergency) — ready for development', type: 'assignment', read: false, timestamp: daysAgo(1), scrId: 'scr_1' },
+      { id: 'notif_2', userId: 'user_impl', message: 'SCR-2026-0009 development complete — awaiting QA review', type: 'status', read: false, timestamp: daysAgo(1), scrId: 'scr_9' },
+      { id: 'notif_3', userId: 'user_cio', message: 'SCR-2026-0002 requires your management approval', type: 'approval', read: false, timestamp: daysAgo(2), scrId: 'scr_2' },
+      { id: 'notif_4', userId: 'user_agm', message: 'SCR-2026-0002 requires your management approval', type: 'approval', read: false, timestamp: daysAgo(2), scrId: 'scr_2' },
+      { id: 'notif_5', userId: 'user_admin', message: 'SLA breach: SCR-2026-0002 is overdue', type: 'sla', read: false, timestamp: daysAgo(0), scrId: 'scr_2' },
+      { id: 'notif_6', userId: 'user_impl', message: 'New SCR submitted: SCR-2026-0008 from Pediatrics — awaiting your review', type: 'new_scr', read: true, timestamp: daysAgo(3), scrId: 'scr_8' }
     ];
     this._set('notifications', notifications);
 

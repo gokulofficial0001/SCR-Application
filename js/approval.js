@@ -1,44 +1,50 @@
 /* ============================================================
-   SCR MANAGEMENT SYSTEM — Approval System
+   SCR MANAGEMENT SYSTEM — Approval System (Stage 4: MGT Approval)
+   Both AGM-IT and CIO must approve before advancing to Development.
+   Either rejecting sends the SCR back to Stage 2 (Implementation Review).
    ============================================================ */
 
 const Approval = {
-  // ── Approval chain ──────────────────────────────────────
-  approvalChain: ['project_head', 'agm_it', 'cio'],
+  // Stage 4 approval chain — both required
+  approvalChain: ['agm_it', 'cio'],
 
-  // ── Get approvals for SCR ───────────────────────────────
   getForSCR(scrId) {
     return Store.filter('approvals', a => a.scrId === scrId)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   },
 
-  // ── Check if user can approve ───────────────────────────
+  // Can current user submit a decision at Stage 4?
   canApprove(scrId) {
     const user = Auth.currentUser();
     if (!user) return false;
     if (!Auth.canPerformAction('approve')) return false;
 
     const scr = Store.getById('scr_requests', scrId);
-    if (!scr) return false;
-    if (scr.currentStage < 6) return false; // Must be at completion or approval stage
+    if (!scr || scr.currentStage !== 4) return false;
+    if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (!this.approvalChain.includes(user.role)) return false;
 
-    // Check if already approved by this role
+    // Already decided?
     const existing = Store.filter('approvals', a => a.scrId === scrId && a.approverRole === user.role);
-    if (existing.length > 0) return false;
-
-    return true;
+    return existing.length === 0;
   },
 
-  // ── Submit approval decision ────────────────────────────
+  // Both AGM and CIO have approved?
+  _bothApproved(scrId) {
+    return this.approvalChain.every(role => {
+      const decision = Store.filter('approvals', a => a.scrId === scrId && a.approverRole === role);
+      return decision.length > 0 && decision[decision.length - 1].decision === 'Approved';
+    });
+  },
+
   submitDecision(scrId, decision, comments) {
     const user = Auth.currentUser();
     if (!user) return { success: false, error: 'Not authenticated' };
+    if (!comments || !comments.trim()) return { success: false, error: 'Comments are required' };
 
-    if (!comments || comments.trim() === '') {
-      return { success: false, error: 'Comments are required' };
-    }
+    if (!this.canApprove(scrId)) return { success: false, error: 'You cannot submit a decision for this SCR' };
 
-    const approval = Store.add('approvals', {
+    Store.add('approvals', {
       scrId,
       approverRole: user.role,
       approverName: user.name,
@@ -47,77 +53,113 @@ const Approval = {
       timestamp: Utils.nowISO()
     });
 
-    // Audit
     Audit.log('SCR', scrId, decision, 'decision', null, decision, user.name, user.role);
 
-    // Handle decision
     const scr = Store.getById('scr_requests', scrId);
+
     if (decision === 'Rejected') {
-      Store.update('scr_requests', scrId, { status: 'Rejected' });
-      Audit.log('SCR', scrId, 'Status Changed', 'status', scr.status, 'Rejected');
-    } else if (decision === 'Hold') {
-      Store.update('scr_requests', scrId, { status: 'On Hold' });
-      Audit.log('SCR', scrId, 'Status Changed', 'status', scr.status, 'On Hold');
+      // Rejection from either manager → back to Stage 2 with remarks
+      const fromStage = 4;
+      const toStage = 2;
+
+      const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
+      currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Rejected', notes: comments.trim() }));
+
+      Store.add('workflow_stages', {
+        scrId, stage: toStage,
+        enteredAt: Utils.nowISO(), exitedAt: null,
+        performedBy: user.id, action: 'Returned',
+        notes: `Rejected by ${user.name} (${Utils.getRoleLabel(user.role)}): ${comments.trim()}`
+      });
+
+      Store.update('scr_requests', scrId, { currentStage: toStage, status: 'In Progress' });
+
+      Audit.log('SCR', scrId, 'Stage Rejected', 'currentStage', Utils.getStageName(4), Utils.getStageName(2), user.name, user.role);
+
+      // Notify implementation team
+      const implUsers = Store.filter('users', u => u.role === 'implementation');
+      implUsers.forEach(u => Notifications.create(u.id, `${scr.scrNumber} rejected at Management Approval by ${user.name} — returned to Implementation Review`, 'status', scrId));
+
     } else if (decision === 'Approved') {
-      // Check if final approval (CIO)
-      if (user.role === 'cio') {
-        Store.update('scr_requests', scrId, { status: 'Closed', completionDate: Utils.today() });
-        Audit.log('SCR', scrId, 'Status Changed', 'status', scr.status, 'Closed');
-        // Notify
+      if (this._bothApproved(scrId)) {
+        // Both approved — advance to Stage 5 (Development)
+        const fromStage = 4;
+        const toStage = 5;
+
+        const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
+        currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Approved' }));
+
+        Store.add('workflow_stages', {
+          scrId, stage: toStage,
+          enteredAt: Utils.nowISO(), exitedAt: null,
+          performedBy: user.id, action: 'In Progress',
+          notes: 'Management approval complete — assigned to Development'
+        });
+
+        Store.update('scr_requests', scrId, { currentStage: toStage, status: 'In Progress' });
+
+        Audit.log('SCR', scrId, 'Stage Advanced', 'currentStage', Utils.getStageName(4), Utils.getStageName(5), user.name, user.role);
+
+        // Notify developer(s)
         if (scr.assignedDeveloper) {
-          Notifications.create(scr.assignedDeveloper, `${scr.scrNumber} has been approved and closed by CIO`, 'approval', scrId);
+          Notifications.create(scr.assignedDeveloper, `${scr.scrNumber} has been approved by management — ready for development`, 'assignment', scrId);
         }
-        Notifications.create(scr.createdBy, `Your SCR ${scr.scrNumber} has been approved and closed`, 'approval', scrId);
+        if (scr.assignedDeveloper2) {
+          Notifications.create(scr.assignedDeveloper2, `${scr.scrNumber} has been approved by management — ready for development`, 'assignment', scrId);
+        }
       } else {
-        // Notify next approver
-        const nextIdx = this.approvalChain.indexOf(user.role) + 1;
-        if (nextIdx < this.approvalChain.length) {
-          const nextRole = this.approvalChain[nextIdx];
-          const nextUsers = Store.filter('users', u => u.role === nextRole);
-          nextUsers.forEach(u => {
-            Notifications.create(u.id, `${scr.scrNumber} is awaiting your approval (approved by ${user.name})`, 'approval', scrId);
-          });
-        }
+        // First approval received — notify the other approver
+        const nextRole = this.approvalChain.find(r => r !== user.role);
+        const nextUsers = Store.filter('users', u => u.role === nextRole);
+        nextUsers.forEach(u => Notifications.create(u.id, `${scr.scrNumber} approved by ${user.name} — awaiting your approval`, 'approval', scrId));
       }
     }
 
     Notifications.updateBadge();
-    return { success: true, approval };
+    return { success: true };
   },
 
-  // ── Render approval section for SCR detail ──────────────
+  handleDecision(scrId, decision) {
+    const comments = document.getElementById('approval-comments')?.value || '';
+    const result = this.submitDecision(scrId, decision, comments);
+    if (result.success) {
+      Utils.toast('success', `Decision Recorded`, `SCR ${decision}.`);
+      Router.navigate('scr-detail', { id: scrId });
+    } else {
+      Utils.toast('error', 'Error', result.error);
+    }
+  },
+
+  // Render approval panel inside SCR detail (only visible at Stage 4)
   renderForSCR(scrId) {
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr || scr.currentStage !== 4) return '';
+
     const approvals = this.getForSCR(scrId);
     const canApprove = this.canApprove(scrId);
-
     let html = '';
 
-    // Existing approvals
-    if (approvals.length > 0) {
-      html += approvals.map(a => {
-        const icons = { 'Approved': '✓', 'Rejected': '✕', 'Hold': '⏸' };
-        const statusClass = a.decision.toLowerCase();
-        return `
-          <div class="approval-card">
-            <div class="approval-status-icon ${statusClass}">
-              ${icons[a.decision] || '?'}
-            </div>
-            <div class="approval-info">
-              <div class="approval-role">${Utils.getRoleLabel(a.approverRole)}</div>
-              <div class="approval-name">${Utils.escapeHtml(a.approverName)}</div>
-              <div class="approval-comment">"${Utils.escapeHtml(a.comments)}"</div>
-              <div class="approval-time">${Utils.formatDateTime(a.timestamp)}</div>
-            </div>
-            <div>${Utils.badgeHtml(a.decision, a.decision === 'Approved' ? 'success' : a.decision === 'Rejected' ? 'danger' : 'warning')}</div>
+    // Existing decisions
+    approvals.forEach(a => {
+      const icons = { 'Approved': '✓', 'Rejected': '✕' };
+      const color = a.decision === 'Approved' ? 'success' : 'danger';
+      html += `
+        <div class="approval-card">
+          <div class="approval-status-icon ${a.decision.toLowerCase()}">${icons[a.decision] || '?'}</div>
+          <div class="approval-info">
+            <div class="approval-role">${Utils.getRoleLabel(a.approverRole)}</div>
+            <div class="approval-name">${Utils.escapeHtml(a.approverName)}</div>
+            <div class="approval-comment">"${Utils.escapeHtml(a.comments)}"</div>
+            <div class="approval-time">${Utils.formatDateTime(a.timestamp)}</div>
           </div>
-        `;
-      }).join('');
-    }
+          <div>${Utils.badgeHtml(a.decision, color)}</div>
+        </div>
+      `;
+    });
 
-    // Pending approvals in chain
+    // Pending slots
     this.approvalChain.forEach(role => {
-      const existing = approvals.find(a => a.approverRole === role);
-      if (!existing) {
+      if (!approvals.find(a => a.approverRole === role)) {
         html += `
           <div class="approval-card" style="opacity:0.5">
             <div class="approval-status-icon pending">⏳</div>
@@ -131,13 +173,11 @@ const Approval = {
       }
     });
 
-    // Approval form
+    // Decision form for current user
     if (canApprove) {
       html += `
         <div class="card mt-4" style="border-color:var(--color-primary);border-width:2px">
-          <div class="card-header">
-            <h4 class="card-title">📝 Your Decision</h4>
-          </div>
+          <div class="card-header"><h4 class="card-title">📝 Your Decision</h4></div>
           <div class="card-body">
             <div class="form-group">
               <label class="form-label">Comments <span class="required">*</span></label>
@@ -145,59 +185,44 @@ const Approval = {
             </div>
             <div class="flex gap-3">
               <button class="btn btn-success" onclick="Approval.handleDecision('${scrId}', 'Approved')">✓ Approve</button>
-              <button class="btn btn-warning" onclick="Approval.handleDecision('${scrId}', 'Hold')">⏸ Hold</button>
-              <button class="btn btn-danger" onclick="Approval.handleDecision('${scrId}', 'Rejected')">✕ Reject</button>
+              <button class="btn btn-danger"  onclick="Approval.handleDecision('${scrId}', 'Rejected')">✕ Reject</button>
             </div>
           </div>
         </div>
       `;
     }
 
-    return html || '<p class="text-muted text-sm">No approvals yet</p>';
+    return html || '<p class="text-muted text-sm">No decisions yet</p>';
   },
 
-  // ── Handle approval decision ────────────────────────────
-  handleDecision(scrId, decision) {
-    const comments = document.getElementById('approval-comments')?.value;
-    const result = this.submitDecision(scrId, decision, comments);
-    if (result.success) {
-      Utils.toast('success', `SCR ${decision}`, `Your decision has been recorded.`);
-      Router.navigate('scr-detail', { id: scrId });
-    } else {
-      Utils.toast('error', 'Error', result.error);
-    }
-  },
-
-  // ── Render approvals list page ──────────────────────────
+  // Approvals list page — SCRs at Stage 4 pending current user's decision
   renderList() {
     const user = Auth.currentUser();
     const allSCRs = Store.getAll('scr_requests');
 
-    // SCRs awaiting approval (stage 6 or 7)
     const pending = allSCRs.filter(scr => {
-      if (scr.currentStage < 6) return false;
+      if (scr.currentStage !== 4) return false;
       if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
-      // Check if current user hasn't approved yet
+      if (!this.approvalChain.includes(user.role)) return false;
       const userApproval = Store.filter('approvals', a => a.scrId === scr.id && a.approverRole === user.role);
       return userApproval.length === 0;
     });
 
-    // Recent decisions
     const recentDecisions = Store.getAll('approvals')
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 10);
+      .slice(0, 20);
 
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Approvals</h2>
-          <p class="page-description">Review and approve completed SCRs</p>
+          <h2 class="page-title">Management Approvals</h2>
+          <p class="page-description">SCRs awaiting AGM-IT and CIO approval (both required)</p>
         </div>
       </div>
 
       <div class="tabs">
         <button class="tab active" onclick="Approval.switchTab('pending', this)">Pending (${pending.length})</button>
-        <button class="tab" onclick="Approval.switchTab('history', this)">Recent Decisions</button>
+        <button class="tab" onclick="Approval.switchTab('history', this)">Decision History</button>
       </div>
 
       <div id="approval-tab-pending">
@@ -215,7 +240,7 @@ const Approval = {
                   <div>
                     <div class="flex items-center gap-3 mb-2">
                       <span class="font-bold text-brand">${scr.scrNumber}</span>
-                      ${Utils.priorityBadge(scr.priority)}
+                      ${Utils.priorityBadge(scr.priority || scr.intervention)}
                       ${Utils.statusBadge(scr.status)}
                     </div>
                     <p class="text-secondary text-sm">${Utils.truncate(scr.description, 100)}</p>
@@ -236,14 +261,7 @@ const Approval = {
           <div class="table-container">
             <table class="data-table">
               <thead>
-                <tr>
-                  <th>SCR</th>
-                  <th>Decision</th>
-                  <th>By</th>
-                  <th>Role</th>
-                  <th>Comments</th>
-                  <th>Date</th>
-                </tr>
+                <tr><th>SCR</th><th>Decision</th><th>By</th><th>Role</th><th>Comments</th><th>Date</th></tr>
               </thead>
               <tbody>
                 ${recentDecisions.map(a => {
@@ -251,10 +269,10 @@ const Approval = {
                   return `
                     <tr style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${a.scrId}'})">
                       <td class="font-medium text-brand">${scr ? scr.scrNumber : a.scrId}</td>
-                      <td>${Utils.badgeHtml(a.decision, a.decision === 'Approved' ? 'success' : a.decision === 'Rejected' ? 'danger' : 'warning')}</td>
+                      <td>${Utils.badgeHtml(a.decision, a.decision === 'Approved' ? 'success' : 'danger')}</td>
                       <td>${Utils.escapeHtml(a.approverName)}</td>
                       <td class="text-sm">${Utils.getRoleLabel(a.approverRole)}</td>
-                      <td class="text-sm text-secondary">${Utils.truncate(a.comments, 40)}</td>
+                      <td class="text-sm text-secondary">${Utils.truncate(a.comments, 50)}</td>
                       <td class="text-sm">${Utils.formatDate(a.timestamp)}</td>
                     </tr>
                   `;
@@ -267,7 +285,6 @@ const Approval = {
     `;
   },
 
-  // ── Tab switching ───────────────────────────────────────
   switchTab(tab, el) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');

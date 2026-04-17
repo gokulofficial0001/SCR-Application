@@ -7,27 +7,23 @@ const Auth = {
   permissions: {
     admin: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'approvals', 'feedback', 'audit', 'master-data', 'notifications', 'settings'],
-      actions: ['create_scr', 'edit_scr', 'delete_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'manage_users', 'manage_departments', 'view_audit', 'reset_data']
+      actions: ['create_scr', 'edit_scr', 'delete_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'close_ticket', 'manage_users', 'manage_departments', 'view_audit', 'reset_data']
     },
     cio: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['approve', 'reject', 'hold', 'view_audit']
+      actions: ['approve', 'reject', 'view_audit']
     },
     agm_it: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['approve', 'reject', 'hold', 'advance_stage', 'view_audit']
+      actions: ['approve', 'reject', 'view_audit']
     },
     project_head: {
-      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'view_audit']
-    },
-    it_coordinator: {
-      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'feedback', 'notifications'],
-      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage']
+      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'feedback', 'audit', 'notifications'],
+      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'view_audit']
     },
     implementation: {
-      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'view_audit']
+      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'feedback', 'audit', 'notifications'],
+      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'close_ticket', 'view_audit']
     },
     developer: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'feedback', 'notifications'],
@@ -70,7 +66,11 @@ const Auth = {
       Audit.log('User', session.id, 'Logout', null, null, null, session.name, session.role);
     }
     Store.clearSession();
-    Router.navigate('login');
+    // Close notification panel if open
+    const panel = document.getElementById('notif-panel');
+    if (panel) panel.remove();
+    Notifications.panelOpen = false;
+    App.init();
   },
 
   // ── Current User ────────────────────────────────────────
@@ -118,6 +118,23 @@ const Auth = {
   renderLoginPage() {
     return `
       <div class="login-page">
+        <!-- Animated background -->
+        <div class="login-orb-1"></div>
+        <div class="login-orb-2"></div>
+        <div class="login-orb-3"></div>
+        <div class="login-particles">
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+          <span class="login-particle"></span>
+        </div>
+
         <div class="login-card">
           <div class="login-logo">SCR</div>
           <h2 class="login-title">Welcome Back</h2>
@@ -142,11 +159,11 @@ const Auth = {
             <p class="text-sm text-tertiary text-center" style="margin-bottom:var(--space-3)">Quick Demo Login</p>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-2);font-size:var(--font-xs)">
               <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('admin','admin123')" title="Full system access">👑 Admin</button>
-              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('cio','cio123')" title="Chief Information Officer">🏛️ CIO</button>
-              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('projecthead','ph123')" title="Project Head — approves tickets">📋 Proj. Head</button>
-              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('impl','impl123')" title="Implementation Team — studies & first-level approval" style="background:rgba(20,184,166,0.1);border-color:rgba(20,184,166,0.3);color:#5eead4;">🔬 Impl. Team</button>
-              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('coordinator','itc123')" title="IT Coordinator">🔗 IT Coord.</button>
-              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('developer','dev123')" title="Developer">💻 Developer</button>
+              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('cio','cio123')" title="Chief Information Officer — Management Approval">🏛️ CIO</button>
+              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('agm','agm123')" title="AGM IT — Management Approval">📊 AGM – IT</button>
+              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('projecthead','ph123')" title="Project Head — reviews & assigns developer">📋 Proj. Head</button>
+              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('impl','impl123')" title="Implementation Team — Level 1 review & QA" style="background:rgba(20,184,166,0.1);border-color:rgba(20,184,166,0.3);color:#5eead4;">🔬 Impl. Team</button>
+              <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('developer','dev123')" title="Developer — handles assigned development work">💻 Developer</button>
               <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('requester','req123')" title="Requester — submits SCRs" style="grid-column:span 3">🙋 Requester (End User)</button>
             </div>
           </div>

@@ -131,13 +131,12 @@ const Utils = {
 
   // ── Stage helpers ───────────────────────────────────────
   stages: [
-    { id: 1, name: 'Requirement Submission', short: 'Requirement' },
-    { id: 2, name: 'Ticket Raised', short: 'Ticket' },
-    { id: 3, name: 'Initial Review', short: 'Review' },
-    { id: 4, name: 'R&D Analysis', short: 'R&D' },
-    { id: 5, name: 'Development', short: 'Development' },
-    { id: 6, name: 'SCR Completion', short: 'Completion' },
-    { id: 7, name: 'Approval', short: 'Approval' }
+    { id: 1, name: 'Requirement Submission', short: 'Submitted' },
+    { id: 2, name: 'Implementation Review',  short: 'Impl. Review' },
+    { id: 3, name: 'Project Head Review',    short: 'PH Review' },
+    { id: 4, name: 'Management Approval',    short: 'MGT Approval' },
+    { id: 5, name: 'Development',            short: 'Development' },
+    { id: 6, name: 'QA & Closure',           short: 'QA & Close' }
   ],
 
   getStageName(stageId) {
@@ -148,10 +147,9 @@ const Utils = {
   // ── Role display ────────────────────────────────────────
   roleLabels: {
     'admin': 'System Admin',
-    'cio': 'CIO / Approver',
+    'cio': 'CIO',
     'agm_it': 'AGM – IT',
     'project_head': 'Project Head',
-    'it_coordinator': 'IT Coordinator',
     'implementation': 'Implementation Team',
     'developer': 'Developer',
     'requester': 'Requester'

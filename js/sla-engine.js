@@ -85,10 +85,11 @@ const SLAEngine = {
       // Check if notification already sent
       const existing = Store.filter('notifications', n => n.scrId === scr.id && n.type === 'sla');
       if (existing.length === 0) {
-        // Notify IT Coordinator
-        Notifications.create('user_itc', `SLA breach: ${scr.scrNumber} is overdue`, 'sla', scr.id);
-        // Notify Project Head
-        Notifications.create('user_ph', `SLA breach: ${scr.scrNumber} requires escalation`, 'sla', scr.id);
+        // Notify all implementation team members and project head
+        const implUsers = Store.filter('users', u => u.role === 'implementation');
+        implUsers.forEach(u => Notifications.create(u.id, `SLA breach: ${scr.scrNumber} is overdue`, 'sla', scr.id));
+        const phUsers = Store.filter('users', u => u.role === 'project_head');
+        phUsers.forEach(u => Notifications.create(u.id, `SLA breach: ${scr.scrNumber} requires escalation`, 'sla', scr.id));
       }
     });
   },

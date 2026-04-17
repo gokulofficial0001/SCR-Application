@@ -174,29 +174,65 @@ const Notifications = {
 
   // ── Notify relevant users on events ─────────────────────
   notifySCRCreated(scr) {
-    this.create('user_itc', `New SCR submitted: ${scr.scrNumber} from ${scr.department}`, 'new_scr', scr.id);
-    this.create('user_ph', `New SCR submitted: ${scr.scrNumber} — ${scr.priority} priority`, 'new_scr', scr.id);
+    // Notify all implementation team members of new submission
+    const implUsers = Store.filter('users', u => u.role === 'implementation');
+    implUsers.forEach(u => this.create(u.id, `New SCR submitted: ${scr.scrNumber} from ${scr.department} — awaiting your review`, 'new_scr', scr.id));
     this.updateBadge();
   },
 
   notifySCRAssigned(scr) {
     if (scr.assignedDeveloper) {
-      this.create(scr.assignedDeveloper, `You have been assigned ${scr.scrNumber} (${scr.priority})`, 'assignment', scr.id);
+      this.create(scr.assignedDeveloper, `You have been assigned to ${scr.scrNumber} (${scr.priority || scr.intervention})`, 'assignment', scr.id);
+    }
+    if (scr.assignedDeveloper2) {
+      this.create(scr.assignedDeveloper2, `You have been assigned to ${scr.scrNumber} (${scr.priority || scr.intervention})`, 'assignment', scr.id);
     }
     this.updateBadge();
   },
 
-  notifyStageChange(scr, stageName) {
-    this.create('user_ph', `${scr.scrNumber} has reached ${stageName} stage`, 'status', scr.id);
-    if (scr.assignedDeveloper) {
-      this.create(scr.assignedDeveloper, `${scr.scrNumber} moved to ${stageName}`, 'status', scr.id);
+  notifyStageChange(scr, _fromStage, toStage) {
+    const stageName = Utils.getStageName(toStage);
+    // Notify project head when reaching stage 3
+    if (toStage === 3) {
+      const phUsers = Store.filter('users', u => u.role === 'project_head');
+      phUsers.forEach(u => this.create(u.id, `${scr.scrNumber} is ready for your review — ${stageName}`, 'status', scr.id));
+    }
+    // Notify management when reaching stage 4
+    if (toStage === 4) {
+      const mgtUsers = Store.filter('users', u => u.role === 'agm_it' || u.role === 'cio');
+      mgtUsers.forEach(u => this.create(u.id, `${scr.scrNumber} requires your approval — ${stageName}`, 'approval', scr.id));
+    }
+    // Notify developer when reaching stage 5
+    if (toStage === 5) {
+      if (scr.assignedDeveloper) this.create(scr.assignedDeveloper, `${scr.scrNumber} approved — ready for development`, 'assignment', scr.id);
+      if (scr.assignedDeveloper2) this.create(scr.assignedDeveloper2, `${scr.scrNumber} approved — ready for development`, 'assignment', scr.id);
+    }
+    // Notify implementation team when reaching stage 6 (QA)
+    if (toStage === 6) {
+      const implUsers = Store.filter('users', u => u.role === 'implementation');
+      implUsers.forEach(u => this.create(u.id, `${scr.scrNumber} development complete — awaiting QA review`, 'status', scr.id));
+    }
+    this.updateBadge();
+  },
+
+  notifyRejection(scr, fromStage, toStage, remarks) {
+    const fromName = Utils.getStageName(fromStage);
+    // Always notify implementation team on rejection back to stage 2
+    if (toStage === 2) {
+      const implUsers = Store.filter('users', u => u.role === 'implementation');
+      implUsers.forEach(u => this.create(u.id, `${scr.scrNumber} returned from ${fromName}: "${remarks}"`, 'status', scr.id));
+    }
+    // Notify developer on rejection back to stage 5
+    if (toStage === 5) {
+      if (scr.assignedDeveloper) this.create(scr.assignedDeveloper, `${scr.scrNumber} QA failed — please rework: "${remarks}"`, 'status', scr.id);
+      if (scr.assignedDeveloper2) this.create(scr.assignedDeveloper2, `${scr.scrNumber} QA failed — please rework: "${remarks}"`, 'status', scr.id);
     }
     this.updateBadge();
   },
 
   notifyApprovalNeeded(scr) {
-    this.create('user_cio', `${scr.scrNumber} is awaiting your approval`, 'approval', scr.id);
-    this.create('user_agm', `${scr.scrNumber} is awaiting approval`, 'approval', scr.id);
+    const mgtUsers = Store.filter('users', u => u.role === 'agm_it' || u.role === 'cio');
+    mgtUsers.forEach(u => this.create(u.id, `${scr.scrNumber} is awaiting your management approval`, 'approval', scr.id));
     this.updateBadge();
   }
 };

@@ -10,7 +10,7 @@ const Router = {
   navigate(page, params = {}) {
     // Auth guard
     if (page !== 'login' && !Auth.isLoggedIn()) {
-      this.navigate('login');
+      App.init();
       return;
     }
 

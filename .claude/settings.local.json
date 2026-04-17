@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/Users/it/.claude/projects/d--scr-SCR-APPLICATION-ANTIGRAVITY-SCR-FILES/memory/\")"
+    ]
+  }
+}
