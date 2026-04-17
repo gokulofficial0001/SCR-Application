@@ -1052,3 +1052,352 @@ a:hover {
 #app > div[style*="display:flex"] p {
   color: var(--color-text-tertiary) !important;
 }
+
+/* ══════════════════════════════════════════════════════════
+   ██  CRITICAL FIX: LOGIN DARK PANEL TEXT   ██
+   The left healthcare panel keeps a DARK background, so all
+   text inside MUST stay light. Global h1-h6 dark override
+   was accidentally darkening the big title — reverse that.
+   ══════════════════════════════════════════════════════════ */
+
+.login-visual h1,
+.login-visual h2,
+.login-visual h3,
+.login-visual h4,
+.login-visual h5,
+.login-visual h6 {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+}
+
+.login-visual .lv-title {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.login-visual p,
+.login-visual .lv-sub {
+  color: rgba(255,255,255,0.72) !important;
+}
+
+.login-visual .lv-tag       { color: #34d399 !important; }
+.login-visual .lv-tag-dot   { background: #34d399 !important; }
+.login-visual .lv-chip      { color: rgba(255,255,255,0.9) !important; }
+.login-visual .lv-hb-name   { color: rgba(255,255,255,0.82) !important; }
+.login-visual .lv-hb-status { color: #4ade80 !important; }
+.login-visual .lv-hb-dot    { background: #4ade80 !important; }
+.login-visual .lv-vital-hdr   { color: rgba(255,255,255,0.55) !important; }
+.login-visual .lv-vital-live  { color: #4ade80 !important; }
+.login-visual .lv-live-dot    { background: #4ade80 !important; }
+.login-visual .lv-vital-name  { color: rgba(255,255,255,0.55) !important; }
+.login-visual .ecg-val        { color: #4ade80 !important; }
+.login-visual .spo2-val       { color: #22d3ee !important; }
+.login-visual .resp-val       { color: #fbbf24 !important; }
+.login-visual .lv-vital-val small { color: rgba(255,255,255,0.6) !important; }
+
+/* ══════════════════════════════════════════════════════════
+   TABLE ALIGNMENT — consistent cells, vertical middle,
+   nowrap dates, truncated descriptions, distinct first col
+   ══════════════════════════════════════════════════════════ */
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table th,
+.data-table td {
+  vertical-align: middle;
+  padding: var(--space-3) var(--space-4);
+}
+
+.data-table th {
+  text-align: left;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+}
+
+/* Consistent row height — prevents jump when cell has badge */
+.data-table tbody tr {
+  height: 52px;
+}
+
+/* Last column (usually date/created) — never wrap, lighter */
+.data-table td:last-child {
+  white-space: nowrap;
+  color: var(--color-text-tertiary) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badges inside cells — align middle */
+.data-table td .badge,
+.data-table td .sla-badge {
+  vertical-align: middle;
+}
+
+/* Description cell — truncate with ellipsis */
+.data-table td[style*="max-width"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* First column: SCR number distinct */
+.data-table tbody td:first-child {
+  color: var(--color-primary-dark) !important;
+  font-weight: 600;
+}
+
+/* Audit log — monospace timestamp */
+.audit-row td:first-child,
+#audit-table td:first-child {
+  font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace !important;
+  font-size: var(--font-xs) !important;
+  color: var(--color-text-tertiary) !important;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Audit diff values */
+.audit-row .text-danger,
+#audit-table .text-danger {
+  color: var(--color-danger-dark) !important;
+  background: rgba(184,52,30,0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+
+.audit-row .text-success,
+#audit-table .text-success {
+  color: var(--color-success-dark) !important;
+  background: rgba(13,122,90,0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════
+   REMAINING TEXT COLOR FIXES
+   ══════════════════════════════════════════════════════════ */
+
+/* "N results" text at end of filter bar */
+.filter-bar > .text-tertiary,
+.filter-bar > span.text-sm {
+  color: var(--color-text-tertiary) !important;
+  margin-left: auto;
+  font-weight: 600;
+}
+
+/* SCR detail description paragraph inline color */
+.card-body p[style*="color:var(--color-text-primary)"],
+.card-body p[style*="color: var(--color-text-primary)"] {
+  color: var(--color-text-primary) !important;
+  line-height: 1.7 !important;
+}
+
+/* Attachments list inline */
+.card-body ol[style*="color:var(--color-text-secondary)"],
+.card-body ol {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Bold strong tags inside activity/cards */
+.activity-text strong,
+.card strong,
+.card-body strong {
+  color: var(--color-text-primary) !important;
+  font-weight: 600;
+}
+
+/* Inline text-muted / text-tertiary helpers — force contrast */
+.text-muted     { color: var(--color-text-muted) !important; }
+.text-tertiary  { color: var(--color-text-tertiary) !important; }
+
+/* Required asterisk in forms */
+.form-label .required,
+.required {
+  color: var(--color-danger-dark) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   CONFIRM DIALOG ICONS
+   ══════════════════════════════════════════════════════════ */
+
+.confirm-icon.warning {
+  background: rgba(194,105,10,0.15) !important;
+  color: var(--color-warning-dark) !important;
+}
+
+.confirm-icon.danger {
+  background: rgba(184,52,30,0.15) !important;
+  color: var(--color-danger-dark) !important;
+}
+
+.confirm-icon.success {
+  background: rgba(13,122,90,0.15) !important;
+  color: var(--color-success-dark) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOOLTIP — dark bubble on light theme
+   ══════════════════════════════════════════════════════════ */
+
+[data-tooltip]::after {
+  background: #2a2520 !important;
+  color: #ffffff !important;
+  font-size: var(--font-xs);
+  font-weight: 500;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(70,60,40,0.2);
+}
+
+/* ══════════════════════════════════════════════════════════
+   SPINNER — visible border color on light bg
+   ══════════════════════════════════════════════════════════ */
+
+.spinner {
+  border-color: var(--color-border) !important;
+  border-top-color: var(--color-primary) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   FORM — minimum height for easy clicking
+   ══════════════════════════════════════════════════════════ */
+
+.form-input,
+.form-select {
+  min-height: 44px;
+}
+
+.form-textarea {
+  min-height: 100px;
+}
+
+/* SCR form section labels */
+.scr-form-section-body .form-label {
+  color: var(--color-text-primary) !important;
+  font-weight: 600;
+  font-size: var(--font-sm);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+/* ══════════════════════════════════════════════════════════
+   BUTTON HIERARCHY — better visual weight on light
+   ══════════════════════════════════════════════════════════ */
+
+.btn {
+  font-weight: 600;
+}
+
+.btn-ghost {
+  font-weight: 500;
+}
+
+/* Back button (← Back) should blend in */
+.btn-ghost.btn-sm {
+  color: var(--color-text-tertiary) !important;
+}
+
+.btn-ghost.btn-sm:hover {
+  color: var(--color-text-primary) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE HEADER — title + back + badges layout
+   ══════════════════════════════════════════════════════════ */
+
+.page-header-left h2.page-title {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+/* ══════════════════════════════════════════════════════════
+   CARD BODY SPACING
+   ══════════════════════════════════════════════════════════ */
+
+.card-body {
+  padding-top: var(--space-2);
+}
+
+/* ══════════════════════════════════════════════════════════
+   DETAIL GRID — consistent gaps
+   ══════════════════════════════════════════════════════════ */
+
+.detail-grid {
+  gap: var(--space-3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   ATTACHMENT SLOT — warm border
+   ══════════════════════════════════════════════════════════ */
+
+.attachment-slot {
+  border-bottom: 1px solid var(--color-border) !important;
+  padding: var(--space-2) 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   FOCUS RING — refined for light
+   ══════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-primary-glow) !important;
+}
+
+button:focus-visible,
+.btn:focus-visible,
+.nav-item:focus-visible {
+  outline-offset: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   MODAL BODY — readable text
+   ══════════════════════════════════════════════════════════ */
+
+.modal-body,
+.modal-body p {
+  color: var(--color-text-secondary) !important;
+}
+
+.modal-body strong {
+  color: var(--color-text-primary) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   NOTIFICATION PANEL ITEMS — readable
+   ══════════════════════════════════════════════════════════ */
+
+.notif-item .notif-message,
+.notif-item > div,
+.notif-item p {
+  color: var(--color-text-secondary) !important;
+}
+
+.notif-item .notif-time,
+.notif-item small {
+  color: var(--color-text-muted) !important;
+}
+
+.notif-item.unread {
+  font-weight: 500;
+}
+
+.notif-item.unread .notif-message,
+.notif-item.unread > div:not(.notif-time) {
+  color: var(--color-text-primary) !important;
+}
