@@ -1,0 +1,1313 @@
+/* ============================================================
+   SCR MANAGEMENT SYSTEM — UI / UX Enhancement Layer
+   Layered on top of components.css — overrides & extensions
+   ============================================================ */
+
+/* ══════════════════════════════════════════════════════════
+   1. GLOBAL POLISH
+   ══════════════════════════════════════════════════════════ */
+
+/* Smooth page transitions */
+.content-area > * {
+  animation: pageIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Better focus ring — accessible but beautiful */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 4px var(--color-primary-glow);
+}
+
+/* Smoother text rendering */
+body {
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   2. CARD ENHANCEMENTS
+   ══════════════════════════════════════════════════════════ */
+
+.card {
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
+  will-change: transform;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* Clickable card lift */
+.card[onclick],
+.card[style*="cursor:pointer"],
+.card[style*="cursor: pointer"] {
+  cursor: pointer;
+}
+
+.card[onclick]:hover,
+.card[style*="cursor:pointer"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(59,130,246,0.12);
+}
+
+/* Card header separator is cleaner */
+.card-header {
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Chart card header — same treatment */
+.chart-card {
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.chart-card:hover {
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.chart-header {
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ══════════════════════════════════════════════════════════
+   3. WELCOME BANNER — Premium redesign
+   ══════════════════════════════════════════════════════════ */
+
+.welcome-banner {
+  background: linear-gradient(135deg,
+    rgba(59,130,246,0.18) 0%,
+    rgba(139,92,246,0.12) 40%,
+    rgba(16,185,129,0.08) 100%);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8) var(--space-8);
+  margin-bottom: var(--space-6);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.welcome-banner::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 240px; height: 240px;
+  background: radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.welcome-banner::after {
+  content: '';
+  position: absolute;
+  bottom: -40px; left: 30%;
+  width: 160px; height: 160px;
+  background: radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.welcome-title {
+  font-size: var(--font-3xl);
+  font-weight: var(--font-weight-extra);
+  background: linear-gradient(135deg, #f1f5f9 30%, #93c5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--space-2);
+  line-height: 1.2;
+}
+
+.welcome-text {
+  font-size: var(--font-md);
+  color: rgba(148,163,184,0.9);
+  line-height: 1.6;
+}
+
+.welcome-text strong {
+  color: var(--color-danger-light);
+  font-weight: var(--font-weight-semi);
+}
+
+/* ══════════════════════════════════════════════════════════
+   4. KPI CARDS — Premium look
+   ══════════════════════════════════════════════════════════ */
+
+.kpi-card {
+  position: relative;
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  cursor: pointer;
+}
+
+.kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+}
+
+.kpi-card.primary:hover { box-shadow: 0 16px 40px rgba(59,130,246,0.25); border-color: rgba(59,130,246,0.35); }
+.kpi-card.success:hover { box-shadow: 0 16px 40px rgba(16,185,129,0.25); border-color: rgba(16,185,129,0.35); }
+.kpi-card.info:hover    { box-shadow: 0 16px 40px rgba(139,92,246,0.25);  border-color: rgba(139,92,246,0.35); }
+.kpi-card.warning:hover { box-shadow: 0 16px 40px rgba(245,158,11,0.25);  border-color: rgba(245,158,11,0.35); }
+.kpi-card.danger:hover  { box-shadow: 0 16px 40px rgba(239,68,68,0.25);   border-color: rgba(239,68,68,0.35); }
+
+.kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  margin-bottom: var(--space-3);
+  position: relative;
+}
+
+.kpi-value {
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: var(--font-weight-extra);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: var(--space-1);
+}
+
+.kpi-label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+
+/* ══════════════════════════════════════════════════════════
+   5. TABLES — Enhanced row interactions
+   ══════════════════════════════════════════════════════════ */
+
+.table-container {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.07);
+  overflow: hidden;
+  background: var(--glass-bg-light);
+}
+
+.data-table th {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  color: rgba(148,163,184,0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  background: rgba(10,14,39,0.6);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.data-table td {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-base);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: color var(--transition-fast);
+}
+
+.data-table tbody tr {
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  position: relative;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(59,130,246,0.06);
+}
+
+.data-table tbody tr:hover td {
+  color: var(--color-text-primary);
+}
+
+/* First column — SCR number — always brand color */
+.data-table tbody tr td:first-child {
+  font-weight: var(--font-weight-semi);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Sortable header indicator */
+.data-table th.sortable::after {
+  content: ' ↕';
+  opacity: 0.35;
+  font-size: 10px;
+}
+
+.data-table th.sortable:hover::after {
+  opacity: 0.75;
+}
+
+/* ══════════════════════════════════════════════════════════
+   6. STATUS & PRIORITY BADGES — More distinctive
+   ══════════════════════════════════════════════════════════ */
+
+/* Base badge refresh */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* Status badges with left-dot */
+.badge.success  { background: rgba(16,185,129,0.12);  color: #34d399; border-color: rgba(16,185,129,0.25); }
+.badge.danger   { background: rgba(239,68,68,0.12);   color: #f87171; border-color: rgba(239,68,68,0.25); }
+.badge.warning  { background: rgba(245,158,11,0.12);  color: #fbbf24; border-color: rgba(245,158,11,0.25); }
+.badge.info     { background: rgba(139,92,246,0.12);  color: #a78bfa; border-color: rgba(139,92,246,0.25); }
+.badge.neutral  { background: rgba(100,116,139,0.12); color: #94a3b8; border-color: rgba(100,116,139,0.2); }
+.badge.primary  { background: rgba(59,130,246,0.12);  color: #60a5fa; border-color: rgba(59,130,246,0.25); }
+
+/* ══════════════════════════════════════════════════════════
+   7. FORM ELEMENTS — Better UX
+   ══════════════════════════════════════════════════════════ */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form-label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.form-label .required {
+  color: var(--color-danger-light);
+  margin-left: 3px;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  background: rgba(10,14,39,0.6);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  width: 100%;
+}
+
+.form-input:hover:not(:disabled),
+.form-select:hover:not(:disabled),
+.form-textarea:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.18);
+  background: rgba(15,19,51,0.7);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: rgba(15,19,51,0.8);
+  box-shadow: 0 0 0 3px var(--color-primary-glow), 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: var(--line-height-relaxed);
+}
+
+/* Select dropdown arrow */
+.form-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+/* Helper text */
+.form-help {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.form-error-text {
+  font-size: var(--font-xs);
+  color: var(--color-danger-light);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Disabled field style */
+.form-input:disabled,
+.form-select:disabled,
+.form-textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(255,255,255,0.03);
+}
+
+/* ══════════════════════════════════════════════════════════
+   8. BUTTONS — Better hierarchy & states
+   ══════════════════════════════════════════════════════════ */
+
+.btn {
+  font-weight: var(--font-weight-semi);
+  letter-spacing: 0.01em;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Primary — main action */
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa 0%, var(--color-primary) 100%);
+  box-shadow: 0 4px 16px rgba(59,130,246,0.45);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(59,130,246,0.3);
+}
+
+/* Success */
+.btn-success {
+  background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%);
+  box-shadow: 0 2px 8px rgba(16,185,129,0.3);
+}
+
+.btn-success:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(16,185,129,0.45);
+  transform: translateY(-1px);
+}
+
+/* Danger */
+.btn-danger {
+  background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark) 100%);
+  box-shadow: 0 2px 8px rgba(239,68,68,0.3);
+}
+
+.btn-danger:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(239,68,68,0.45);
+  transform: translateY(-1px);
+}
+
+/* Warning */
+.btn-warning {
+  background: linear-gradient(135deg, var(--color-warning) 0%, var(--color-warning-dark) 100%);
+  color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+}
+
+.btn-warning:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(245,158,11,0.45);
+  transform: translateY(-1px);
+}
+
+/* Ghost — subtle */
+.btn-ghost {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.14);
+  color: var(--color-text-primary);
+}
+
+/* Small */
+.btn-sm {
+  font-size: var(--font-xs);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  min-height: 30px;
+}
+
+/* Large */
+.btn-lg {
+  font-size: var(--font-md);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-lg);
+  min-height: 48px;
+}
+
+/* Disabled */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   9. PAGE HEADER — Stronger visual hierarchy
+   ══════════════════════════════════════════════════════════ */
+
+.page-header {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-6);
+}
+
+.page-title {
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-extra);
+  color: var(--color-text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.page-description {
+  font-size: var(--font-sm);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ══════════════════════════════════════════════════════════
+   10. PIPELINE STAGES — More visual clarity
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline {
+  padding: var(--space-3) var(--space-4);
+  background: rgba(10,14,39,0.5);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.pipeline-stage {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  letter-spacing: 0.03em;
+}
+
+.pipeline-stage.completed {
+  background: rgba(16,185,129,0.08);
+  color: #34d399;
+}
+
+.pipeline-stage.current {
+  background: rgba(59,130,246,0.15);
+  color: var(--color-primary-light);
+  box-shadow: 0 0 12px rgba(59,130,246,0.2);
+  animation: stage-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes stage-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(59,130,246,0.2); }
+  50%       { box-shadow: 0 0 20px rgba(59,130,246,0.35); }
+}
+
+.pipeline-stage.pending {
+  opacity: 0.45;
+}
+
+.pipeline-connector {
+  height: 1px;
+  opacity: 0.5;
+}
+
+.pipeline-connector.completed {
+  background: linear-gradient(90deg, #10b981, #34d399);
+  opacity: 1;
+}
+
+.stage-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   11. EMPTY STATES — More engaging
+   ══════════════════════════════════════════════════════════ */
+
+.empty-state {
+  padding: var(--space-16) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-state-icon {
+  font-size: 3.5rem;
+  opacity: 0.5;
+  margin-bottom: var(--space-5);
+  filter: drop-shadow(0 0 20px rgba(59,130,246,0.3));
+  animation: float 4s ease-in-out infinite;
+}
+
+.empty-state-title {
+  font-size: var(--font-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+  text-align: center;
+}
+
+.empty-state-text {
+  font-size: var(--font-base);
+  color: var(--color-text-tertiary);
+  text-align: center;
+  max-width: 380px;
+  line-height: var(--line-height-relaxed);
+}
+
+/* ══════════════════════════════════════════════════════════
+   12. TABS — Cleaner look with pill indicator
+   ══════════════════════════════════════════════════════════ */
+
+.tabs {
+  padding: var(--space-1);
+  background: rgba(10,14,39,0.5);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.07);
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: var(--space-6);
+}
+
+.tab {
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: none;
+  border-bottom: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+  background: rgba(255,255,255,0.06);
+}
+
+.tab.active {
+  color: var(--color-text-primary);
+  background: rgba(59,130,246,0.18);
+  border-color: transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   13. ACTIVITY FEED — Better visual rhythm
+   ══════════════════════════════════════════════════════════ */
+
+.activity-item {
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+  margin: 0 calc(-1 * var(--space-3));
+}
+
+.activity-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.activity-text {
+  font-size: var(--font-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.activity-time {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   14. OVERDUE ITEMS — Clearer urgency
+   ══════════════════════════════════════════════════════════ */
+
+.overdue-item {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: pointer;
+}
+
+.overdue-item:hover {
+  transform: translateX(3px);
+  box-shadow: -3px 0 0 var(--color-danger), 0 4px 12px rgba(239,68,68,0.15);
+}
+
+/* ══════════════════════════════════════════════════════════
+   15. WORKLOAD ITEMS — Better developer cards
+   ══════════════════════════════════════════════════════════ */
+
+.workload-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+  margin: 0 calc(-1 * var(--space-3));
+}
+
+.workload-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.workload-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: var(--font-sm);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   16. APPROVAL CARDS — Decision-state borders
+   ══════════════════════════════════════════════════════════ */
+
+.approval-card {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.07);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.approval-card:has(.approval-status-icon.approved) {
+  border-color: rgba(16,185,129,0.25);
+  background: rgba(16,185,129,0.04);
+}
+
+.approval-card:has(.approval-status-icon.rejected) {
+  border-color: rgba(239,68,68,0.25);
+  background: rgba(239,68,68,0.04);
+}
+
+.approval-status-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 1.2rem;
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+
+.approval-status-icon.approved {
+  background: rgba(16,185,129,0.15);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16,185,129,0.2);
+}
+
+.approval-status-icon.rejected {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
+  box-shadow: 0 0 12px rgba(239,68,68,0.2);
+}
+
+.approval-role {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.01em;
+}
+
+.approval-comment {
+  font-size: var(--font-sm);
+  color: rgba(148,163,184,0.8);
+  font-style: italic;
+  margin-top: var(--space-1);
+  line-height: var(--line-height-relaxed);
+}
+
+.approval-time {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ══════════════════════════════════════════════════════════
+   17. SCR FORM SECTIONS — Better section structure
+   ══════════════════════════════════════════════════════════ */
+
+.scr-form-section {
+  border-radius: var(--radius-xl);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.scr-form-section:focus-within {
+  border-color: rgba(59,130,246,0.3);
+  box-shadow: 0 4px 20px rgba(59,130,246,0.08);
+}
+
+.scr-form-section-title {
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(10,14,39,0.4);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.01em;
+}
+
+/* Section number badge — correct class */
+.scr-section-num {
+  box-shadow: 0 2px 8px rgba(59,130,246,0.4), 0 0 12px rgba(59,130,246,0.15);
+}
+
+.scr-form-section-body {
+  padding: var(--space-5);
+}
+
+/* ══════════════════════════════════════════════════════════
+   18. DETAIL VIEW — Better field display
+   ══════════════════════════════════════════════════════════ */
+
+.detail-field {
+  padding: var(--space-3);
+  background: rgba(10,14,39,0.35);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: border-color var(--transition-fast);
+}
+
+.detail-field:hover {
+  border-color: rgba(255,255,255,0.1);
+}
+
+.detail-label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  color: rgba(100,116,139,0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-1);
+}
+
+.detail-value {
+  font-size: var(--font-base);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-relaxed);
+  word-break: break-word;
+}
+
+/* ══════════════════════════════════════════════════════════
+   19. NOTIFICATION PANEL — Better item design
+   ══════════════════════════════════════════════════════════ */
+
+.notif-panel {
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-right: none;
+  box-shadow: -8px 0 40px rgba(0,0,0,0.5);
+}
+
+.notif-panel-header {
+  background: rgba(10,14,39,0.8);
+  backdrop-filter: blur(12px);
+}
+
+.notif-item {
+  transition: background var(--transition-fast);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+}
+
+.notif-item:hover {
+  background: rgba(59,130,246,0.07);
+}
+
+.notif-item.unread {
+  background: rgba(59,130,246,0.06);
+  border-left: 3px solid var(--color-primary);
+}
+
+/* ══════════════════════════════════════════════════════════
+   20. MODAL ENHANCEMENTS
+   ══════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+}
+
+.modal {
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.06);
+}
+
+.modal-header {
+  background: rgba(10,14,39,0.5);
+}
+
+.modal-title {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.modal-close {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.3);
+  color: var(--color-danger-light);
+}
+
+.modal-footer {
+  background: rgba(10,14,39,0.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   21. SIDEBAR ENHANCEMENTS
+   ══════════════════════════════════════════════════════════ */
+
+.sidebar {
+  background: rgba(5,8,25,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.sidebar-brand {
+  padding: var(--space-4) var(--space-5);
+}
+
+.brand-icon {
+  font-weight: 900;
+  font-size: var(--font-md);
+  letter-spacing: 0.05em;
+}
+
+.nav-item {
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+  padding: var(--space-2) var(--space-4);
+}
+
+.nav-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text-primary);
+  padding-left: calc(var(--space-4) + 2px);
+}
+
+.nav-item.active {
+  background: rgba(59,130,246,0.15);
+  color: var(--color-primary-light);
+  border: 1px solid rgba(59,130,246,0.2);
+}
+
+.nav-item.active::before {
+  width: 4px;
+  height: 55%;
+  border-radius: var(--radius-full);
+}
+
+.nav-section-title {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.12em;
+  color: rgba(100,116,139,0.6);
+  padding: var(--space-2) var(--space-4);
+}
+
+/* ══════════════════════════════════════════════════════════
+   22. HEADER ENHANCEMENTS
+   ══════════════════════════════════════════════════════════ */
+
+.header {
+  background: rgba(10,14,39,0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.header-title {
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.notification-btn {
+  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: all var(--transition-fast);
+}
+
+.notification-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-1px);
+}
+
+.user-menu {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.04);
+  transition: all var(--transition-fast);
+}
+
+.user-menu:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* ══════════════════════════════════════════════════════════
+   23. STEP INDICATOR — Better multi-step UX
+   ══════════════════════════════════════════════════════════ */
+
+.step-indicator {
+  background: rgba(10,14,39,0.5);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.step-number {
+  width: 30px;
+  height: 30px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  border: 2px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+}
+
+.step-dot.active .step-number {
+  box-shadow: 0 0 16px var(--color-primary-glow);
+}
+
+.step-dot.completed .step-number {
+  box-shadow: 0 0 12px rgba(16,185,129,0.3);
+}
+
+.step-label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+
+.step-line {
+  flex: 1;
+  max-width: 48px;
+  height: 1px;
+  opacity: 0.4;
+}
+
+.step-line.completed {
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   24. FEEDBACK STAR RATING — Better interaction
+   ══════════════════════════════════════════════════════════ */
+
+.star-rating .star {
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+  color: rgba(100,116,139,0.4);
+}
+
+.star-rating .star:hover,
+.star-rating .star.active {
+  color: var(--color-warning);
+  transform: scale(1.2);
+  filter: drop-shadow(0 0 6px rgba(245,158,11,0.5));
+}
+
+.feedback-score-circle {
+  width: 88px;
+  height: 88px;
+  font-size: var(--font-3xl);
+  font-weight: var(--font-weight-extra);
+  border-width: 2px;
+  box-shadow: 0 0 24px currentColor;
+  transition: transform var(--transition-base);
+}
+
+.feedback-score-circle.excellent {
+  box-shadow: 0 0 24px rgba(16,185,129,0.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   25. SCR LIST TABLE — Row-level badges better aligned
+   ══════════════════════════════════════════════════════════ */
+
+/* SCR number column */
+#scr-table td:first-child {
+  font-weight: var(--font-weight-semi);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+/* Better description truncation */
+#scr-table td[style*="max-width"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   26. QUICK STATS — Better visual separation
+   ══════════════════════════════════════════════════════════ */
+
+.quick-stats {
+  background: rgba(10,14,39,0.4);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-6);
+  gap: var(--space-8);
+  margin-top: var(--space-5);
+}
+
+.quick-stat {
+  position: relative;
+}
+
+.quick-stat + .quick-stat::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--space-4));
+  top: 10%;
+  height: 80%;
+  width: 1px;
+  background: rgba(255,255,255,0.08);
+}
+
+.quick-stat-value {
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-extra);
+  background: linear-gradient(135deg, #f1f5f9, #93c5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.quick-stat-label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+/* ══════════════════════════════════════════════════════════
+   27. TOAST — Colored left border
+   ══════════════════════════════════════════════════════════ */
+
+.toast {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px);
+  background: rgba(22,27,64,0.95);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  border-left-width: 3px;
+}
+
+.toast.success { border-left-color: var(--color-success); }
+.toast.error   { border-left-color: var(--color-danger); }
+.toast.warning { border-left-color: var(--color-warning); }
+.toast.info    { border-left-color: var(--color-primary); }
+
+.toast-title {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-sm);
+}
+
+.toast-message {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* ══════════════════════════════════════════════════════════
+   28. FILTER BAR — Better search + filter layout
+   ══════════════════════════════════════════════════════════ */
+
+.filter-bar {
+  background: rgba(10,14,39,0.5);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-xl);
+  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.search-bar {
+  max-width: 320px;
+}
+
+.search-bar .form-input {
+  padding-left: 38px;
+  background: rgba(255,255,255,0.05);
+}
+
+/* ══════════════════════════════════════════════════════════
+   29. CHART CARDS — Department bars
+   ══════════════════════════════════════════════════════════ */
+
+.progress-bar {
+  background: rgba(255,255,255,0.06);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: var(--radius-full);
+}
+
+.progress-fill.success { background: linear-gradient(90deg, var(--color-success), var(--color-success-light)); }
+.progress-fill.warning { background: linear-gradient(90deg, var(--color-warning), var(--color-warning-light)); }
+.progress-fill.danger  { background: linear-gradient(90deg, var(--color-danger), var(--color-danger-light)); }
+
+/* ══════════════════════════════════════════════════════════
+   30. PAGINATION — Cleaner
+   ══════════════════════════════════════════════════════════ */
+
+.pagination-btn.active {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+}
+
+/* ══════════════════════════════════════════════════════════
+   31. TIMELINE — Better connector
+   ══════════════════════════════════════════════════════════ */
+
+.timeline {
+  padding-left: var(--space-10);
+}
+
+.timeline::before {
+  background: linear-gradient(to bottom, var(--color-primary) 0%, rgba(255,255,255,0.08) 100%);
+  opacity: 0.5;
+  width: 1px;
+}
+
+.timeline-dot {
+  width: 14px;
+  height: 14px;
+  background: var(--color-bg-deep);
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  left: -29px;
+  top: 2px;
+}
+
+.timeline-dot.success { border-color: var(--color-success); box-shadow: 0 0 8px rgba(16,185,129,0.3); }
+.timeline-dot.warning { border-color: var(--color-warning); box-shadow: 0 0 8px rgba(245,158,11,0.3); }
+.timeline-dot.danger  { border-color: var(--color-danger);  box-shadow: 0 0 8px rgba(239,68,68,0.3); }
+
+.timeline-content {
+  padding: var(--space-3) var(--space-4);
+  background: rgba(10,14,39,0.4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.timeline-title {
+  font-weight: var(--font-weight-semi);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+}
+
+.timeline-text {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+  line-height: var(--line-height-relaxed);
+}
+
+/* ══════════════════════════════════════════════════════════
+   32. SLA INDICATORS — Consistent display
+   ══════════════════════════════════════════════════════════ */
+
+.sla-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semi);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.sla-badge.ok      { background: rgba(16,185,129,0.1);  color: #34d399; }
+.sla-badge.at-risk { background: rgba(245,158,11,0.1);  color: #fbbf24; }
+.sla-badge.breach  { background: rgba(239,68,68,0.1);   color: #f87171; animation: sla-blink 1.5s ease-in-out infinite; }
+
+@keyframes sla-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   33. SCROLLBAR — Thin & styled
+   ══════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+/* ══════════════════════════════════════════════════════════
+   34. SELECTION
+   ══════════════════════════════════════════════════════════ */
+
+::selection {
+  background: rgba(59,130,246,0.4);
+  color: white;
+}
