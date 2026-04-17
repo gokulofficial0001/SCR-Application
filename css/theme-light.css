@@ -294,19 +294,25 @@ body::before {
   background: radial-gradient(circle, rgba(99,68,184,0.05) 0%, transparent 70%) !important;
 }
 
+/* Solid dark color — no gradient trick. Guaranteed readable on cream bg. */
 .welcome-title {
-  background: linear-gradient(135deg, #2a2520 30%, #3d5fb8 100%) !important;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  font-weight: 800 !important;
+  font-size: var(--font-2xl) !important;
 }
 
 .welcome-text {
   color: var(--color-text-secondary) !important;
+  font-size: var(--font-base) !important;
 }
 
 .welcome-text strong {
   color: var(--color-danger-dark) !important;
+  font-weight: 700 !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -378,11 +384,16 @@ body::before {
 }
 
 .form-input:focus,
-.form-select:focus,
 .form-textarea:focus {
   border-color: var(--color-primary) !important;
   background: #ffffff !important;
   box-shadow: 0 0 0 3px var(--color-primary-glow) !important;
+}
+
+.form-select:focus {
+  border-color: var(--color-primary) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
 }
 
 .form-input::placeholder,
@@ -391,8 +402,162 @@ body::before {
   font-style: normal;
 }
 
+/* Native dropdown — no custom chevron, no effects */
 .form-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23746e62' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  -moz-appearance: auto !important;
+  background-image: none !important;
+  padding: var(--space-2) var(--space-3) !important;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+/* ══════════════════════════════════════════════════════════
+   FIXED-WIDTH OVERRIDES — inline widths too narrow for 16px font
+   ══════════════════════════════════════════════════════════ */
+
+/* Filter bar dropdowns — let them size to content, not 140px */
+.filter-bar .form-select[style*="width:140px"],
+.filter-bar .form-select[style*="width:160px"],
+.filter-bar .form-select[style*="width:"] {
+  width: auto !important;
+  min-width: 150px;
+  max-width: 220px;
+  flex: 0 0 auto;
+}
+
+/* Number inputs with max-width:120px — ensure readable at 16px font */
+.form-input[type="number"][style*="max-width:120px"] {
+  max-width: 140px !important;
+  min-width: 100px;
+}
+
+/* Search bar — flex-grow on mobile / medium screens */
+.filter-bar .search-bar {
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+
+/* Status filter (shorter values) can be narrower */
+.filter-bar #filter-status {
+  min-width: 140px;
+}
+
+/* Priority */
+.filter-bar #filter-priority {
+  min-width: 140px;
+}
+
+/* Department (longer names) */
+.filter-bar #filter-dept {
+  min-width: 180px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   UNIVERSAL BOX-SIZING + OVERFLOW GUARDS
+   ══════════════════════════════════════════════════════════ */
+
+.btn,
+.form-input,
+.form-select,
+.form-textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* Buttons with emoji + text — don't let them squish */
+.btn {
+  white-space: nowrap;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-xs);
+}
+
+.btn-lg {
+  min-height: 48px;
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-md);
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILTER BAR — proper flex wrapping on narrow screens
+   ══════════════════════════════════════════════════════════ */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   KPI CARD — prevent value overflow
+   ══════════════════════════════════════════════════════════ */
+
+.kpi-card {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.kpi-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.kpi-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE HEADER — action buttons wrap cleanly
+   ══════════════════════════════════════════════════════════ */
+
+.page-header {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.page-header-left {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.page-header > .flex {
+  flex-wrap: wrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SEARCH BAR — icon + input alignment
+   ══════════════════════════════════════════════════════════ */
+
+.search-bar {
+  position: relative;
+  display: flex;
+}
+
+.search-bar .form-input {
+  width: 100%;
+  padding-left: 38px !important;
+}
+
+.search-bar .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: var(--font-sm);
+  z-index: 1;
 }
 
 /* ══════════════════════════════════════════════════════════

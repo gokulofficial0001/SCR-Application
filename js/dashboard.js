@@ -45,7 +45,7 @@ const Dashboard = {
       <!-- Welcome Banner -->
       <div class="welcome-banner">
         <h2 class="welcome-title">Welcome back, ${Utils.escapeHtml(user.name)} 👋</h2>
-        <p class="welcome-text">Here's what's happening with your SCR system today. You have 
+        <p class="welcome-text">Here's what's happening with your SCR system today. You have
           <strong>${slaSummary.breached} overdue</strong> and <strong>${slaSummary.atRisk} at-risk</strong> requests.</p>
       </div>
 

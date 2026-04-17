@@ -1,0 +1,715 @@
+/* ============================================================
+   SCR MANAGEMENT SYSTEM — Buttery Smooth 120fps Motion Layer
+   ──────────────────────────────────────────────────────────
+   Target: 120Hz promotion motion class feel (iOS/ProMotion).
+   Every transition lives on the compositor thread, uses spring
+   physics curves, and gets `contain` isolation to prevent any
+   parent from dirtying during the animation.
+   ============================================================ */
+
+:root {
+  /* ── Premium Easing Curves ────────────────────────────── */
+  --ease-snap:       cubic-bezier(0.3, 0, 0, 1);           /* Material 3 emphasized — quick decel */
+  --ease-butter:     cubic-bezier(0.16, 1, 0.3, 1);        /* deep deceleration, premium feel */
+  --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);    /* slight overshoot, bouncy */
+  --ease-soft:       cubic-bezier(0.4, 0, 0.2, 1);         /* Material standard */
+  --ease-out-quart:  cubic-bezier(0.25, 1, 0.5, 1);        /* smooth exit */
+  --ease-in-out:     cubic-bezier(0.65, 0, 0.35, 1);       /* balanced */
+
+  /* ── Velocity tokens (shorter = snappier) ────────────── */
+  --dur-instant:  80ms;
+  --dur-fast:     140ms;
+  --dur-base:     200ms;
+  --dur-medium:   280ms;
+  --dur-slow:     380ms;
+  --dur-page:     440ms;
+
+  /* Backwards compat — override old var names */
+  --transition-fast:   var(--dur-fast) var(--ease-butter);
+  --transition-base:   var(--dur-base) var(--ease-butter);
+  --transition-slow:   var(--dur-medium) var(--ease-butter);
+  --transition-spring: var(--dur-medium) var(--ease-spring);
+}
+
+/* ══════════════════════════════════════════════════════════
+   1. FOUNDATIONAL GPU RENDERING HINTS
+   ══════════════════════════════════════════════════════════ */
+
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Any element that will ever animate — pin to compositor */
+.card,
+.kpi-card,
+.chart-card,
+.btn,
+.nav-item,
+.modal,
+.modal-overlay,
+.toast,
+.notif-panel,
+.notif-item,
+.sidebar,
+.login-card,
+.welcome-banner,
+.activity-item,
+.workload-item,
+.overdue-item,
+.tab,
+.filter-chip,
+.pipeline-stage,
+.star-rating .star,
+.step-dot,
+.approval-card,
+.kpi-icon,
+.activity-icon,
+.workload-avatar,
+.user-avatar,
+.notification-btn,
+.header-toggle,
+.user-menu,
+.modal-close,
+.data-table tbody tr {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
+}
+
+/* `contain` isolates paint/layout boundaries — parent dirty regions stop at these */
+.card,
+.kpi-card,
+.chart-card,
+.modal,
+.toast,
+.notif-item,
+.activity-item,
+.workload-item,
+.overdue-item {
+  contain: layout paint;
+}
+
+/* Offscreen items skip rendering until visible */
+.data-table tr,
+.activity-item,
+.workload-item,
+.notif-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   2. NAV ITEM — pure transform slide (no padding animation)
+   ══════════════════════════════════════════════════════════ */
+
+.nav-item {
+  padding-left: var(--space-4) !important;
+  transition:
+    transform var(--dur-fast) var(--ease-butter),
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft) !important;
+  will-change: transform;
+}
+
+.nav-item:hover {
+  padding-left: var(--space-4) !important;
+  transform: translate3d(3px, 0, 0);
+}
+
+.nav-item:active {
+  transform: translate3d(1px, 0, 0);
+  transition-duration: var(--dur-instant) !important;
+}
+
+.nav-item.active {
+  transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   3. CARDS — spring lift with isolated paint
+   ══════════════════════════════════════════════════════════ */
+
+.card,
+.chart-card {
+  transition:
+    transform var(--dur-base) var(--ease-butter),
+    box-shadow var(--dur-base) var(--ease-butter),
+    border-color var(--dur-fast) var(--ease-soft) !important;
+  will-change: transform;
+}
+
+.card[onclick]:hover,
+.card[style*="cursor:pointer"]:hover {
+  transform: translate3d(0, -3px, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   4. KPI CARDS — GPU lift with spring overshoot
+   ══════════════════════════════════════════════════════════ */
+
+.kpi-card {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-butter),
+    border-color var(--dur-fast) var(--ease-soft) !important;
+  will-change: transform;
+}
+
+.kpi-card:hover {
+  transform: translate3d(0, -4px, 0);
+}
+
+.kpi-card:active {
+  transform: translate3d(0, -1px, 0);
+  transition-duration: var(--dur-instant) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   5. BUTTONS — ultra-responsive press, spring hover
+   ══════════════════════════════════════════════════════════ */
+
+.btn {
+  transition:
+    transform var(--dur-fast) var(--ease-butter),
+    background-color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-butter),
+    border-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft) !important;
+  will-change: transform;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-success:hover:not(:disabled),
+.btn-danger:hover:not(:disabled),
+.btn-warning:hover:not(:disabled) {
+  transform: translate3d(0, -1.5px, 0);
+}
+
+.btn:active:not(:disabled) {
+  transform: translate3d(0, 0.5px, 0) scale(0.985);
+  transition-duration: var(--dur-instant) !important;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   6. OVERDUE ITEM — silky slide with danger glow
+   ══════════════════════════════════════════════════════════ */
+
+.overdue-item {
+  transition:
+    transform var(--dur-base) var(--ease-butter),
+    box-shadow var(--dur-base) var(--ease-butter) !important;
+  will-change: transform;
+}
+
+.overdue-item:hover {
+  transform: translate3d(4px, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   7. ACTIVITY / WORKLOAD / NOTIF ITEMS
+   ══════════════════════════════════════════════════════════ */
+
+.activity-item,
+.workload-item,
+.notif-item {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-butter) !important;
+  will-change: background-color, transform;
+}
+
+.activity-item:hover,
+.workload-item:hover {
+  transform: translate3d(2px, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   8. TABLE ROWS — fade bg only (no transform on tr)
+   ══════════════════════════════════════════════════════════ */
+
+.data-table tbody tr {
+  transition: background-color var(--dur-fast) var(--ease-soft) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   9. FORM INPUTS — silky focus ring
+   ══════════════════════════════════════════════════════════ */
+
+.form-input,
+.form-select,
+.form-textarea {
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-butter) !important;
+  will-change: border-color, box-shadow;
+}
+
+/* ══════════════════════════════════════════════════════════
+   10. TABS — quick, no layout changes
+   ══════════════════════════════════════════════════════════ */
+
+.tab {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-butter) !important;
+}
+
+.tab:active {
+  transform: scale(0.97);
+  transition-duration: var(--dur-instant) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   11. SIDEBAR MOBILE DRAWER — spring slide
+   ══════════════════════════════════════════════════════════ */
+
+.sidebar {
+  transition: transform var(--dur-medium) var(--ease-butter) !important;
+  will-change: transform;
+}
+
+.app-content {
+  transition: margin-left var(--dur-medium) var(--ease-butter) !important;
+}
+
+.header {
+  transition: left var(--dur-medium) var(--ease-butter) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   12. MODAL — premium entry
+   ══════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  will-change: opacity;
+  animation: modalOverlayIn var(--dur-base) var(--ease-butter) !important;
+}
+
+.modal {
+  will-change: transform, opacity;
+  animation: modalIn var(--dur-medium) var(--ease-spring) !important;
+}
+
+@keyframes modalOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   13. TOAST — slide + spring
+   ══════════════════════════════════════════════════════════ */
+
+.toast {
+  will-change: transform, opacity;
+  animation: toastIn var(--dur-medium) var(--ease-spring) !important;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate3d(40px, 0, 0) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   14. NOTIF PANEL
+   ══════════════════════════════════════════════════════════ */
+
+.notif-panel {
+  will-change: transform;
+  animation: notifPanelIn var(--dur-medium) var(--ease-butter) !important;
+}
+
+@keyframes notifPanelIn {
+  from { transform: translate3d(100%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   15. PAGE TRANSITION — butter smooth
+   ══════════════════════════════════════════════════════════ */
+
+.content-area > * {
+  animation: pageInButter var(--dur-medium) var(--ease-butter) both !important;
+  will-change: transform, opacity;
+}
+
+@keyframes pageInButter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   16. STAGGER CHILDREN — tight staggered reveal
+   ══════════════════════════════════════════════════════════ */
+
+.stagger-children > * {
+  opacity: 0;
+  animation: staggerButter var(--dur-medium) var(--ease-butter) forwards !important;
+  will-change: transform, opacity;
+}
+
+@keyframes staggerButter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 30ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 90ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 210ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 270ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 300ms; }
+
+/* ══════════════════════════════════════════════════════════
+   17. LOGIN HEALTHCARE ANIMATIONS — all GPU, all the time
+   ══════════════════════════════════════════════════════════ */
+
+.lv-mesh,
+.lv-node,
+.lv-ring,
+.lv-brand-icon,
+.lv-hb-dot,
+.lv-live-dot,
+.lv-tag-dot,
+.lv-wave-line,
+.lv-conn,
+.lv-ecg-line,
+.lv-chip,
+.ecg-val,
+.lv-vitals,
+.lv-content {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   18. PROGRESS BARS — GPU scaleX (cheaper than width)
+   ══════════════════════════════════════════════════════════ */
+
+.progress-bar {
+  transform: translateZ(0);
+  contain: layout paint;
+}
+
+.progress-fill {
+  transition: width var(--dur-slow) var(--ease-butter) !important;
+  will-change: width;
+}
+
+/* ══════════════════════════════════════════════════════════
+   19. NOTIFICATION BADGE PULSE
+   ══════════════════════════════════════════════════════════ */
+
+.notif-count {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   20. SLA BREACH BLINK — opacity only (GPU)
+   ══════════════════════════════════════════════════════════ */
+
+.sla-badge.breach {
+  will-change: opacity;
+}
+
+/* ══════════════════════════════════════════════════════════
+   21. SCROLL — silky momentum
+   ══════════════════════════════════════════════════════════ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+.data-table,
+.modal-body,
+.notif-panel-body,
+.activity-feed,
+.sidebar-nav,
+.tabs,
+.pipeline,
+body {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.sidebar,
+.header,
+.notif-panel,
+.modal-overlay {
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   22. ICONS / AVATARS — promote for smooth scale animations
+   ══════════════════════════════════════════════════════════ */
+
+.kpi-icon,
+.activity-icon,
+.workload-avatar,
+.user-avatar,
+.brand-icon,
+.login-logo,
+.approval-status-icon,
+.feedback-score-circle,
+.empty-state-icon {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   23. STAR RATING — springy pop
+   ══════════════════════════════════════════════════════════ */
+
+.star-rating .star {
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-spring),
+    filter var(--dur-fast) var(--ease-soft) !important;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.star-rating .star:hover {
+  transform: translate3d(0, 0, 0) scale(1.2);
+}
+
+.star-rating .star.active {
+  transform: translate3d(0, 0, 0) scale(1.15);
+}
+
+.star-rating .star:active {
+  transform: translate3d(0, 0, 0) scale(1.35);
+  transition-duration: var(--dur-instant) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   24. FILTER CHIPS — quick snap
+   ══════════════════════════════════════════════════════════ */
+
+.filter-chip {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-butter) !important;
+}
+
+.filter-chip:active {
+  transform: scale(0.95);
+  transition-duration: var(--dur-instant) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   25. HEADER BUTTONS — spring hover
+   ══════════════════════════════════════════════════════════ */
+
+.header-toggle,
+.notification-btn,
+.user-menu,
+.modal-close {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-butter) !important;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.notification-btn:hover {
+  transform: translate3d(0, -2px, 0);
+}
+
+.notification-btn:active,
+.header-toggle:active {
+  transform: translate3d(0, 0, 0) scale(0.92);
+  transition-duration: var(--dur-instant) !important;
+}
+
+.modal-close:hover {
+  transform: translate3d(0, 0, 0) rotate(90deg);
+}
+
+/* ══════════════════════════════════════════════════════════
+   26. KILL `transition: all` everywhere — enforce specifics
+   ══════════════════════════════════════════════════════════ */
+
+.brand-icon,
+.pagination-btn,
+.nav-badge,
+.pipeline-stage,
+.step-number,
+.approval-status-icon,
+.feedback-score-circle,
+.badge,
+.sla-badge {
+  transition-property: transform, opacity, background-color, border-color, color, box-shadow !important;
+  transition-duration: var(--dur-fast) !important;
+  transition-timing-function: var(--ease-butter) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   27. PAGINATION — spring press
+   ══════════════════════════════════════════════════════════ */
+
+.pagination-btn:hover {
+  transform: translate3d(0, -1px, 0);
+}
+
+.pagination-btn:active {
+  transform: translate3d(0, 0, 0) scale(0.9);
+  transition-duration: var(--dur-instant) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   28. PIPELINE STAGE CURRENT — shadow pulse only
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline-stage.current {
+  will-change: box-shadow;
+}
+
+/* ══════════════════════════════════════════════════════════
+   29. SEARCH BAR INPUT
+   ══════════════════════════════════════════════════════════ */
+
+.search-bar .form-input {
+  will-change: border-color, box-shadow;
+}
+
+/* ══════════════════════════════════════════════════════════
+   30. ANIMATION CLASSES — promoted to GPU
+   ══════════════════════════════════════════════════════════ */
+
+.animate-fade-in,
+.animate-fade-in-up,
+.animate-fade-in-down,
+.animate-fade-in-left,
+.animate-fade-in-right,
+.animate-scale-in,
+.animate-slide-in-right,
+.animate-slide-in-up {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   31. DISABLE SLOW BACKDROP-FILTER TRANSITIONS
+   backdrop-filter is expensive to animate — only use statically
+   ══════════════════════════════════════════════════════════ */
+
+.sidebar,
+.header,
+.modal-overlay,
+.glass-bg,
+.glass-bg-light,
+.notif-panel,
+.login-card {
+  /* Keep backdrop filter STATIC, never in a transition */
+  transition-property: transform, background-color, box-shadow !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   32. REDUCED MOTION — respect OS preference
+   ══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .lv-wave-line,
+  .lv-conn,
+  .lv-node,
+  .lv-ring,
+  .lv-ecg-line,
+  .lv-mesh {
+    animation: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   33. ULTRA-HIGH REFRESH DEVICES — buttery on 120Hz+ ProMotion
+   iPad Pro / iPhone ProMotion / high-refresh Android devices
+   ══════════════════════════════════════════════════════════ */
+
+@media (min-resolution: 2dppx) and (prefers-reduced-motion: no-preference) {
+  /* On high-DPI displays, use optimized rendering */
+  .card,
+  .kpi-card,
+  .btn,
+  .nav-item,
+  .modal {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   34. CLEANUP — remove will-change after animation
+   will-change is expensive to leave on constantly. But for
+   hot interactive elements, the tradeoff is worth it.
+   For one-time entry animations, clear after:
+   ══════════════════════════════════════════════════════════ */
+
+.content-area > *,
+.stagger-children > *,
+.modal,
+.toast,
+.notif-panel {
+  /* Animation ends → will-change auto-cleared by animation-fill-mode both */
+  animation-fill-mode: both;
+}
