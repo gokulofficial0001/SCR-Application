@@ -96,35 +96,20 @@ const SelfService = {
     `;
   },
 
-  // ── Open an action in a new popup window (NOT a tab) ───
-  // Browsers honor "popup window" over "tab" when width/height specified.
+  // ── Open an action in a new TAB with a minimal focused view ──
   openInNewWindow(action) {
-    const w = Math.min(1200, screen.availWidth - 80);
-    const h = Math.min(880, screen.availHeight - 80);
-    const left = Math.max(0, Math.round((screen.availWidth  - w) / 2));
-    const top  = Math.max(0, Math.round((screen.availHeight - h) / 2));
-
-    // Same-origin URL with ?action= query so the opened window auto-triggers
     const base = window.location.pathname.replace(/[^/]*$/, '');
-    const url = `${base}?action=${encodeURIComponent(action)}`;
-
-    const features = [
-      `width=${w}`, `height=${h}`, `left=${left}`, `top=${top}`,
-      'resizable=yes', 'scrollbars=yes', 'status=no',
-      'toolbar=no', 'menubar=no', 'location=no'
-    ].join(',');
-
-    const popup = window.open(url, '_blank', features);
-
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // Popup was blocked — fall back to inline behavior so feature still works
-      Utils.toast('warning', 'Popup Blocked',
-        'Allow popups for this site to open in a new window. Opening inline instead.');
+    const url = `${base}?minimal=${encodeURIComponent(action)}`;
+    // No size features → browser opens as a tab (not a popup window)
+    const tab = window.open(url, '_blank');
+    if (!tab) {
+      Utils.toast('warning', 'New Tab Blocked',
+        'Allow popups for this site to open a new tab. Opening inline instead.');
       this._runAction(action);
     }
   },
 
-  // ── Action dispatcher (used both by popup auto-trigger and fallback) ──
+  // ── Dispatcher (fallback when new tab is blocked) ─────────
   _runAction(action) {
     switch (action) {
       case 'create-scr':  this.showQuickForm();     break;
@@ -133,16 +118,104 @@ const SelfService = {
     }
   },
 
-  // ── Called from App.init when URL has ?action= ─────────
-  handleUrlAction() {
-    try {
-      const action = new URL(window.location.href).searchParams.get('action');
-      if (!action) return;
-      // Run after the Home view is mounted in the DOM
-      setTimeout(() => this._runAction(action), 120);
-      // Clean URL so refresh / bookmark doesn't re-fire the action
-      window.history.replaceState({}, '', window.location.pathname);
-    } catch (e) { /* ignore URL parse errors */ }
+  // ── Render minimal content (called by App.renderMinimal) ──
+  // Reuses the existing show* methods by injecting the container
+  // IDs they expect into the minimal content area.
+  renderMinimal(action) {
+    const host = document.getElementById('minimal-content');
+    if (!host) return;
+
+    if (action === 'create-scr') {
+      host.innerHTML = `<div id="self-service-form"></div>`;
+      this.showQuickForm();
+    } else if (action === 'track') {
+      host.innerHTML = `<div id="self-service-tracker"></div>`;
+      this.showTracker();
+    } else if (action === 'feedback') {
+      host.innerHTML = `<div id="self-service-my-scrs"></div>`;
+      this.showFeedbackList();
+    } else {
+      host.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❓</div><h3 class="empty-state-title">Unknown Action</h3><button class="btn btn-primary mt-4" onclick="App.backToHomeFromMinimal()">Back to Home</button></div>`;
+    }
+
+    // Rewire any in-form Close/Cancel buttons to go back to Home
+    // (instead of hiding the container and leaving a blank tab)
+    setTimeout(() => this._rewireCloseButtonsForMinimal(), 100);
+  },
+
+  // In minimal mode, Close/Cancel buttons should navigate to Home,
+  // not just hide the inline container (which would leave a blank tab)
+  _rewireCloseButtonsForMinimal() {
+    document.querySelectorAll('#minimal-content [onclick*="self-service-form"][onclick*="hidden"], #minimal-content [onclick*="self-service-tracker"][onclick*="hidden"]').forEach(btn => {
+      btn.setAttribute('onclick', 'App.backToHomeFromMinimal()');
+      btn.setAttribute('title', 'Back to Home');
+    });
+  },
+
+  // ── Submission success modal (healthcare-flow phrases) ──
+  // Shown after New SCR / Feedback submit. Auto-redirects to Home after 4s.
+  showSuccessModal({ title, message, buttonLabel = 'Go to Home →', icon = '✅', color = 'success', autoRedirectSec = 4 } = {}) {
+    // Healthcare-flow phrases — randomized to feel fresh each time
+    const phrases = [
+      'Helping healthcare run smoother — one request at a time.',
+      'Your request is in our hands. We\'ll take it from here.',
+      'Technology in service of care.',
+      'Another step toward seamless hospital operations.',
+      'Powering better patient care through better IT.',
+      'Behind every system change is a push for better healthcare delivery.',
+      'Together, we\'re building a more responsive Hospital IT.',
+      'Progress happens one SCR at a time.'
+    ];
+    const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+
+    // Close any existing modals first
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+
+    const colorMap = {
+      success: 'var(--color-success-dark)',
+      info:    'var(--color-primary-dark)',
+      warning: 'var(--color-warning-dark)'
+    };
+    const titleColor = colorMap[color] || colorMap.success;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'success-modal';
+    overlay.innerHTML = `
+      <div class="modal modal-sm" style="max-width:480px">
+        <div class="modal-body" style="text-align:center;padding:var(--space-8) var(--space-6)">
+          <div style="font-size:4.5rem;margin-bottom:var(--space-3);filter:drop-shadow(0 4px 16px rgba(13,122,90,0.25))">${icon}</div>
+          <h2 style="font-size:var(--font-xl);margin-bottom:var(--space-2);color:${titleColor};font-weight:800">${Utils.escapeHtml(title)}</h2>
+          <p style="color:var(--color-text-secondary);line-height:1.6;margin-bottom:var(--space-5);font-size:var(--font-md)">${Utils.escapeHtml(message)}</p>
+          <div style="padding:var(--space-3) var(--space-4);background:var(--color-bg-surface);border-left:3px solid var(--color-primary);border-radius:var(--radius-md);margin-bottom:var(--space-5);text-align:left">
+            <p class="text-sm" style="font-style:italic;color:var(--color-text-secondary);line-height:1.5;margin:0">&ldquo;${Utils.escapeHtml(phrase)}&rdquo;</p>
+            <p class="text-xs text-tertiary" style="margin:4px 0 0">— Hospital IT, SCR Team</p>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="App.backToHomeFromMinimal()" style="min-width:200px">${Utils.escapeHtml(buttonLabel)}</button>
+          ${autoRedirectSec > 0 ? `<p class="text-xs text-muted" style="margin-top:var(--space-3)">Returning to Home in <span id="success-countdown" style="font-weight:700">${autoRedirectSec}</span>s…</p>` : ''}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Auto-redirect countdown
+    if (autoRedirectSec > 0) {
+      let sec = autoRedirectSec;
+      const tick = setInterval(() => {
+        sec--;
+        const counter = document.getElementById('success-countdown');
+        if (counter) counter.textContent = sec;
+        if (sec <= 0) {
+          clearInterval(tick);
+          App.backToHomeFromMinimal();
+        }
+      }, 1000);
+
+      // Cancel auto-redirect if user closes the modal manually
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) clearInterval(tick);
+      });
+    }
   },
 
   // ── Quick SCR Form ──────────────────────────────────────
@@ -345,8 +418,18 @@ const SelfService = {
 
     const result = SCRManager.createSCR(data);
     if (result.success) {
-      Utils.toast('success', 'SCR Submitted! 🎉', `Your request ${result.scr.scrNumber} has been created`);
-      Router.navigate('self-service');
+      const isMinimal = document.body.dataset.mode === 'minimal';
+      if (isMinimal) {
+        this.showSuccessModal({
+          icon: '🎉',
+          title: 'Your Request Has Been Submitted',
+          message: `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.`,
+          buttonLabel: 'Back to Home →'
+        });
+      } else {
+        Utils.toast('success', 'SCR Submitted! 🎉', `Your request ${result.scr.scrNumber} has been created`);
+        Router.navigate('self-service');
+      }
     } else {
       Utils.toast('error', 'Error', result.error || 'Failed to submit');
     }

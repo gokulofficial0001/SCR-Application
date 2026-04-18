@@ -149,10 +149,23 @@ const Feedback = {
     const result = this.submitFeedback(scrId, ratings, comments);
 
     if (result.success) {
-      Utils.toast('success', 'Thank You!', `Feedback submitted with avg score ${result.feedback.avgScore}/5`);
+      const isMinimal = document.body.dataset.mode === 'minimal';
       document.getElementById('feedback-modal')?.remove();
       this._ratings = {};
-      Router.navigate('scr-detail', { id: scrId });
+
+      if (isMinimal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+        SelfService.showSuccessModal({
+          icon: '⭐',
+          title: 'Thank You for Your Feedback',
+          message: `Your ${result.feedback.avgScore}/5 rating has been recorded. Your input helps us improve how we deliver healthcare IT.`,
+          buttonLabel: 'Back to Home →'
+        });
+      } else {
+        Utils.toast('success', 'Thank You!', `Feedback submitted with avg score ${result.feedback.avgScore}/5`);
+        Router.navigate('scr-detail', { id: scrId });
+      }
+    } else {
+      Utils.toast('error', 'Error', result.error || 'Feedback could not be saved');
     }
   },
 

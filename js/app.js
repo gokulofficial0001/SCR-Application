@@ -20,6 +20,16 @@ const App = {
       return;
     }
 
+    // Minimal mode — opened from Home quick-action cards in a new tab
+    // URL carries ?minimal=create-scr | track | feedback and gets a
+    // stripped-down shell showing only the requested section.
+    const urlParams = new URL(window.location.href).searchParams;
+    const minimalAction = urlParams.get('minimal');
+    if (minimalAction) {
+      this.renderMinimal(minimalAction);
+      return;
+    }
+
     // Render app shell
     this.renderShell();
 
@@ -32,11 +42,50 @@ const App = {
 
     // Run SLA check
     SLAEngine.checkAndNotify();
+  },
 
-    // If launched via popup with ?action=..., auto-trigger once DOM mounts
-    if (typeof SelfService !== 'undefined' && SelfService.handleUrlAction) {
-      SelfService.handleUrlAction();
-    }
+  // ── Minimal view (focused single-action tab) ────────────
+  renderMinimal(action) {
+    const info = {
+      'create-scr': { icon: '📝', title: 'New Change Request',   sub: 'Submit a software change request to the Hospital IT team' },
+      'track':      { icon: '🔍', title: 'Track Request Status', sub: 'Check the progress of an existing SCR' },
+      'feedback':   { icon: '⭐', title: 'Give Feedback',          sub: 'Rate the delivery of a completed request' }
+    }[action] || { icon: '📋', title: 'Self Service', sub: '' };
+
+    document.body.dataset.mode = 'minimal';
+
+    document.getElementById('app').innerHTML = `
+      <div class="minimal-wrapper" style="min-height:100vh;display:flex;flex-direction:column;background:var(--color-bg-deepest)">
+        <header class="minimal-header" style="position:sticky;top:0;z-index:10;background:var(--color-bg-elevated);border-bottom:1px solid var(--color-border);padding:var(--space-4) var(--space-6);display:flex;align-items:center;gap:var(--space-4);box-shadow:var(--shadow-sm);flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="App.backToHomeFromMinimal()" title="Back to Home">← Back to Home</button>
+          <div style="flex:1;min-width:200px">
+            <h1 style="font-size:var(--font-lg);margin:0;line-height:1.2;color:var(--color-text-primary)">${info.icon} ${Utils.escapeHtml(info.title)}</h1>
+            ${info.sub ? `<p class="text-sm text-tertiary" style="margin:2px 0 0">${Utils.escapeHtml(info.sub)}</p>` : ''}
+          </div>
+          <div style="font-size:var(--font-xs);color:var(--color-text-tertiary)">
+            ${Utils.escapeHtml(Auth.currentUser()?.name || '')}
+          </div>
+        </header>
+        <main style="flex:1;padding:var(--space-5) var(--space-4);width:100%;max-width:960px;margin:0 auto">
+          <div id="minimal-content"></div>
+        </main>
+        <div class="toast-container" id="toast-container"></div>
+      </div>
+    `;
+
+    // Mount the specific section into the minimal content area
+    setTimeout(() => {
+      if (typeof SelfService !== 'undefined' && SelfService.renderMinimal) {
+        SelfService.renderMinimal(action);
+      }
+    }, 40);
+  },
+
+  // ── Exit minimal mode — load full Home in the same tab ──
+  backToHomeFromMinimal() {
+    // Drop ?minimal= from the URL, reload into the normal app shell
+    delete document.body.dataset.mode;
+    window.location.href = window.location.pathname;
   },
 
   // ── Render Login ────────────────────────────────────────
