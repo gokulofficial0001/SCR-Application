@@ -119,33 +119,48 @@ const SelfService = {
   },
 
   // ── Render minimal content (called by App.renderMinimal) ──
-  // Reuses the existing show* methods by injecting the container
-  // IDs they expect into the minimal content area.
+  // Uses the SAME SCRManager.renderForm() that all other roles see, so
+  // the form is consistent across the app and already requester-scoped.
   renderMinimal(action) {
     const host = document.getElementById('minimal-content');
     if (!host) return;
 
     if (action === 'create-scr') {
-      host.innerHTML = `<div id="self-service-form"></div>`;
-      this.showQuickForm();
+      // Reuse the canonical SCR request form (role-aware, same layout)
+      host.innerHTML = SCRManager.renderForm();
+      setTimeout(() => {
+        if (typeof SCRManager.postRenderForm === 'function') SCRManager.postRenderForm();
+        // 1. Hide the form's own page-header (the shell header already shows title + back button)
+        document.querySelectorAll('#minimal-content > form .page-header, #minimal-content .page-header').forEach(h => {
+          // If the page-header is inside the form wrapper, hide it to avoid duplication
+          h.style.display = 'none';
+        });
+        // 2. Rewire bottom "← Cancel" button → back to Home
+        document.querySelectorAll('#minimal-content [onclick*="scr-list"], #minimal-content [onclick*="Router.goBack"]').forEach(btn => {
+          btn.setAttribute('onclick', 'App.backToHomeFromMinimal()');
+          btn.setAttribute('title', 'Back to Home');
+          if (/Cancel|Back/i.test(btn.textContent)) btn.textContent = '← Back to Home';
+        });
+      }, 40);
+
     } else if (action === 'track') {
       host.innerHTML = `<div id="self-service-tracker"></div>`;
       this.showTracker();
+      setTimeout(() => this._rewireInlineCloseButtons(), 100);
+
     } else if (action === 'feedback') {
       host.innerHTML = `<div id="self-service-my-scrs"></div>`;
       this.showFeedbackList();
+      setTimeout(() => this._rewireInlineCloseButtons(), 100);
+
     } else {
       host.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❓</div><h3 class="empty-state-title">Unknown Action</h3><button class="btn btn-primary mt-4" onclick="App.backToHomeFromMinimal()">Back to Home</button></div>`;
     }
-
-    // Rewire any in-form Close/Cancel buttons to go back to Home
-    // (instead of hiding the container and leaving a blank tab)
-    setTimeout(() => this._rewireCloseButtonsForMinimal(), 100);
   },
 
-  // In minimal mode, Close/Cancel buttons should navigate to Home,
-  // not just hide the inline container (which would leave a blank tab)
-  _rewireCloseButtonsForMinimal() {
+  // Rewire inline Close/Cancel buttons (used by tracker / feedback list
+  // which use self-service.js's own containers).
+  _rewireInlineCloseButtons() {
     document.querySelectorAll('#minimal-content [onclick*="self-service-form"][onclick*="hidden"], #minimal-content [onclick*="self-service-tracker"][onclick*="hidden"]').forEach(btn => {
       btn.setAttribute('onclick', 'App.backToHomeFromMinimal()');
       btn.setAttribute('title', 'Back to Home');

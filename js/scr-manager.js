@@ -1386,19 +1386,40 @@ const SCRManager = {
     });
 
     let result;
+    const isMinimal = document.body.dataset.mode === 'minimal';
+
     if (editId) {
       result = this.updateSCR(editId, data);
       if (result.success) {
-        Utils.toast('success', 'SCR Updated', `${result.scr.scrNumber} has been updated`);
-        Router.navigate('scr-detail', { id: editId });
+        if (isMinimal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+          SelfService.showSuccessModal({
+            icon: '✏️',
+            title: 'Your Changes Have Been Saved',
+            message: `${result.scr.scrNumber} has been updated. The team will be notified of the changes.`,
+            buttonLabel: 'Back to Home →'
+          });
+        } else {
+          Utils.toast('success', 'SCR Updated', `${result.scr.scrNumber} has been updated`);
+          Router.navigate('scr-detail', { id: editId });
+        }
       }
     } else {
       result = this.createSCR(data);
       if (result.success) {
         let msg = `${result.scr.scrNumber} created successfully`;
         if (result.duplicates.length > 0) msg += ` (${result.duplicates.length} possible duplicates found)`;
-        Utils.toast('success', 'SCR Created', msg);
-        Router.navigate('scr-detail', { id: result.scr.id });
+
+        if (isMinimal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+          SelfService.showSuccessModal({
+            icon: '🎉',
+            title: 'Your Request Has Been Submitted',
+            message: `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.${result.duplicates.length > 0 ? ` (Note: ${result.duplicates.length} similar requests already exist.)` : ''}`,
+            buttonLabel: 'Back to Home →'
+          });
+        } else {
+          Utils.toast('success', 'SCR Created', msg);
+          Router.navigate('scr-detail', { id: result.scr.id });
+        }
       }
     }
 
