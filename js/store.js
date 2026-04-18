@@ -277,7 +277,7 @@ const Store = {
 
     // Role Permissions (editable via User Rights module — mirrors Auth.permissions defaults)
     this._set('role_permissions', {
-      admin:          { pages: ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','master-data','notifications','settings'], actions: ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','reset_data'] },
+      admin:          { pages: ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','reports','master-data','notifications','settings'], actions: ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','view_reports','reset_data'] },
       cio:            { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
       agm_it:         { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
       project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','view_audit'] },
@@ -599,7 +599,7 @@ const Store = {
   // ── Migrate legacy data to current schema ────────
   // Runs on every app init. Idempotent — safe to re-run.
   migrate() {
-    const MIGRATION_VERSION = 3;
+    const MIGRATION_VERSION = 4;
     const current = this._get('migration_version') || 0;
     if (current >= MIGRATION_VERSION) return;
 
@@ -654,6 +654,22 @@ const Store = {
       }
     });
     this._set('scr_requests', scrs);
+
+    // v3 → v4: grant admin access to Reports page + view_reports action
+    // Existing installs seeded before Reports existed won't have it, so the
+    // nav item stays hidden. Patch in place here.
+    if (current < 4) {
+      const perms = this._get('role_permissions');
+      if (perms && perms.admin) {
+        if (Array.isArray(perms.admin.pages) && !perms.admin.pages.includes('reports')) {
+          perms.admin.pages.push('reports');
+        }
+        if (Array.isArray(perms.admin.actions) && !perms.admin.actions.includes('view_reports')) {
+          perms.admin.actions.push('view_reports');
+        }
+        this._set('role_permissions', perms);
+      }
+    }
 
     this._set('migration_version', MIGRATION_VERSION);
     console.log('✅ SCR Store migrated to v' + MIGRATION_VERSION);
