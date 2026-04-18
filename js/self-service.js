@@ -15,19 +15,19 @@ const SelfService = {
         <p class="welcome-text" style="max-width:none;margin:0 auto">Submit new requests, track status, and provide feedback — all in one place</p>
       </div>
 
-      <!-- Quick Actions -->
+      <!-- Quick Actions — open each in a new popup window (not a tab) -->
       <div class="grid-3 gap-4 mb-6 stagger-children">
-        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.showQuickForm()">
+        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.openInNewWindow('create-scr')">
           <div style="font-size:2.5rem;margin-bottom:var(--space-3)">📝</div>
           <h4 style="margin-bottom:var(--space-1)">New Request</h4>
           <p class="text-sm text-tertiary">Submit a new SCR in under 1 minute</p>
         </div>
-        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.showTracker()">
+        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.openInNewWindow('track')">
           <div style="font-size:2.5rem;margin-bottom:var(--space-3)">🔍</div>
           <h4 style="margin-bottom:var(--space-1)">Track Status</h4>
           <p class="text-sm text-tertiary">Search by SCR number to see progress</p>
         </div>
-        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.showFeedbackList()">
+        <div class="card" style="text-align:center;cursor:pointer" onclick="SelfService.openInNewWindow('feedback')">
           <div style="font-size:2.5rem;margin-bottom:var(--space-3)">⭐</div>
           <h4 style="margin-bottom:var(--space-1)">Give Feedback</h4>
           <p class="text-sm text-tertiary">Rate completed requests</p>
@@ -94,6 +94,55 @@ const SelfService = {
         </div>
       </div>
     `;
+  },
+
+  // ── Open an action in a new popup window (NOT a tab) ───
+  // Browsers honor "popup window" over "tab" when width/height specified.
+  openInNewWindow(action) {
+    const w = Math.min(1200, screen.availWidth - 80);
+    const h = Math.min(880, screen.availHeight - 80);
+    const left = Math.max(0, Math.round((screen.availWidth  - w) / 2));
+    const top  = Math.max(0, Math.round((screen.availHeight - h) / 2));
+
+    // Same-origin URL with ?action= query so the opened window auto-triggers
+    const base = window.location.pathname.replace(/[^/]*$/, '');
+    const url = `${base}?action=${encodeURIComponent(action)}`;
+
+    const features = [
+      `width=${w}`, `height=${h}`, `left=${left}`, `top=${top}`,
+      'resizable=yes', 'scrollbars=yes', 'status=no',
+      'toolbar=no', 'menubar=no', 'location=no'
+    ].join(',');
+
+    const popup = window.open(url, '_blank', features);
+
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      // Popup was blocked — fall back to inline behavior so feature still works
+      Utils.toast('warning', 'Popup Blocked',
+        'Allow popups for this site to open in a new window. Opening inline instead.');
+      this._runAction(action);
+    }
+  },
+
+  // ── Action dispatcher (used both by popup auto-trigger and fallback) ──
+  _runAction(action) {
+    switch (action) {
+      case 'create-scr':  this.showQuickForm();     break;
+      case 'track':       this.showTracker();       break;
+      case 'feedback':    this.showFeedbackList();  break;
+    }
+  },
+
+  // ── Called from App.init when URL has ?action= ─────────
+  handleUrlAction() {
+    try {
+      const action = new URL(window.location.href).searchParams.get('action');
+      if (!action) return;
+      // Run after the Home view is mounted in the DOM
+      setTimeout(() => this._runAction(action), 120);
+      // Clean URL so refresh / bookmark doesn't re-fire the action
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (e) { /* ignore URL parse errors */ }
   },
 
   // ── Quick SCR Form ──────────────────────────────────────

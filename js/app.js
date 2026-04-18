@@ -32,6 +32,11 @@ const App = {
 
     // Run SLA check
     SLAEngine.checkAndNotify();
+
+    // If launched via popup with ?action=..., auto-trigger once DOM mounts
+    if (typeof SelfService !== 'undefined' && SelfService.handleUrlAction) {
+      SelfService.handleUrlAction();
+    }
   },
 
   // ── Render Login ────────────────────────────────────────
