@@ -117,12 +117,31 @@ const Workflow = {
     const fromStage = scr.currentStage;
     const targetStage = this._rejectTarget[fromStage];
 
+    // Build lastRejection object — written for every rejection for consistent tracking
+    const rejectionRecord = {
+      fromStage,
+      fromStageName: Utils.getStageName(fromStage),
+      toStage: targetStage,
+      toStageName: targetStage ? Utils.getStageName(targetStage) : 'Terminal',
+      remarks: remarks.trim(),
+      by: user.name,
+      byId: user.id,
+      byRole: user.role,
+      at: Utils.nowISO()
+    };
+
     if (targetStage === null || targetStage === undefined) {
       // Terminal rejection (stage 2)
       const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
       currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Rejected', notes: remarks }));
 
-      Store.update('scr_requests', scrId, { status: 'Rejected', rejectionRemarks: remarks, rejectedBy: user.name, rejectedAt: Utils.nowISO() });
+      Store.update('scr_requests', scrId, {
+        status: 'Rejected',
+        rejectionRemarks: remarks,
+        rejectedBy: user.name,
+        rejectedAt: Utils.nowISO(),
+        lastRejection: rejectionRecord
+      });
 
       Audit.log('SCR', scrId, 'Rejected', 'status', 'In Progress', 'Rejected', user.name, user.role);
 
@@ -134,6 +153,9 @@ const Workflow = {
 
     // Backward escalation
     this._moveToStage(scrId, fromStage, targetStage, user, remarks, 'In Progress', true);
+
+    // Always record lastRejection so it can be tracked on every screen
+    Store.update('scr_requests', scrId, { lastRejection: rejectionRecord });
 
     Audit.log('SCR', scrId, 'Stage Rejected', 'currentStage', Utils.getStageName(fromStage), Utils.getStageName(targetStage), user.name, user.role);
 

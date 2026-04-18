@@ -86,7 +86,21 @@ const Approval = {
         notes: `Rejected by ${user.name} (${Utils.getRoleLabel(user.role)}): ${comments.trim()}`
       });
 
-      Store.update('scr_requests', scrId, { currentStage: toStage, status: 'In Progress' });
+      Store.update('scr_requests', scrId, {
+        currentStage: toStage,
+        status: 'In Progress',
+        lastRejection: {
+          fromStage: 4,
+          fromStageName: Utils.getStageName(4),
+          toStage: 2,
+          toStageName: Utils.getStageName(2),
+          remarks: comments.trim(),
+          by: user.name,
+          byId: user.id,
+          byRole: user.role,
+          at: Utils.nowISO()
+        }
+      });
 
       Audit.log('SCR', scrId, 'Stage Rejected', 'currentStage', Utils.getStageName(4), Utils.getStageName(2), user.name, user.role);
 

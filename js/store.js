@@ -156,7 +156,13 @@ const Store = {
       currentStage: 1,
       status: 'Open',
       createdBy: '',
-      priority: ''  // kept for backward compat, mirrors intervention
+      priority: '',  // kept for backward compat, mirrors intervention
+
+      // Rejection tracking (populated by workflow/approval when rejected)
+      lastRejection: null,  // { fromStage, fromStageName, toStage, toStageName, remarks, by, byId, byRole, at }
+      rejectionRemarks: '',
+      rejectedBy: '',
+      rejectedAt: null
     };
   },
 
@@ -186,7 +192,7 @@ const Store = {
 
   // ── Cascade cleanup: remove all dependent records for a deleted SCR ──
   _cascadeDeleteSCR(scrId) {
-    ['workflow_stages', 'approvals', 'feedback', 'notifications'].forEach(coll => {
+    ['workflow_stages', 'approvals', 'feedback', 'notifications', 'development_updates'].forEach(coll => {
       const items = (this._get(coll) || []).filter(r => r.scrId !== scrId);
       this._set(coll, items);
     });
@@ -590,49 +596,64 @@ const Store = {
     console.log('✅ SCR Store seeded with demo data');
   },
 
-  // ── Migrate legacy data to current approver names ────────
+  // ── Migrate legacy data to current schema ────────
   // Runs on every app init. Idempotent — safe to re-run.
   migrate() {
-    const MIGRATION_VERSION = 2;
+    const MIGRATION_VERSION = 3;
     const current = this._get('migration_version') || 0;
     if (current >= MIGRATION_VERSION) return;
 
-    // v1 → v2: rebrand AGM-IT and CIO users to real-world names
     const nameMap = {
       'Mr. Prasad Kumar': 'Mr. S. Saravanakumar',
       'Dr. Venkatesh R':  'Mr. Biju Velayudhan'
     };
 
-    // Users
-    const users = this._get('users') || [];
-    users.forEach(u => {
-      if (u.id === 'user_agm') { u.name = 'Mr. S. Saravanakumar'; u.email = 'saravanakumar@hospital.in'; }
-      if (u.id === 'user_cio') { u.name = 'Mr. Biju Velayudhan';  u.email = 'biju@hospital.in'; }
-    });
-    this._set('users', users);
+    // v1 → v2: rebrand AGM-IT and CIO users to real-world names
+    if (current < 2) {
+      const users = this._get('users') || [];
+      users.forEach(u => {
+        if (u.id === 'user_agm') { u.name = 'Mr. S. Saravanakumar'; u.email = 'saravanakumar@hospital.in'; }
+        if (u.id === 'user_cio') { u.name = 'Mr. Biju Velayudhan';  u.email = 'biju@hospital.in'; }
+      });
+      this._set('users', users);
 
-    // SCR requests — backfill empty approver names and rename old ones
+      const approvals = this._get('approvals') || [];
+      approvals.forEach(a => {
+        if (nameMap[a.approverName]) a.approverName = nameMap[a.approverName];
+      });
+      this._set('approvals', approvals);
+
+      const audit = this._get('audit_log') || [];
+      audit.forEach(e => {
+        if (nameMap[e.performedBy]) e.performedBy = nameMap[e.performedBy];
+      });
+      this._set('audit_log', audit);
+    }
+
+    // v2 → v3: add lastRejection field on SCRs; backfill from legacy fields
+    // Also rename stored approver names + ensure default Project Head
     const scrs = this._get('scr_requests') || [];
     scrs.forEach(s => {
       if (!s.projectHeadName) s.projectHeadName = 'Ms. Deepa S';
       s.agmItName = nameMap[s.agmItName] || s.agmItName || 'Mr. S. Saravanakumar';
       s.cioName   = nameMap[s.cioName]   || s.cioName   || 'Mr. Biju Velayudhan';
+
+      // Backfill lastRejection on old rejected SCRs
+      if (!s.lastRejection && s.status === 'Rejected' && s.rejectionRemarks) {
+        s.lastRejection = {
+          fromStage: s.currentStage || 2,
+          fromStageName: (typeof Utils !== 'undefined' && Utils.getStageName) ? Utils.getStageName(s.currentStage || 2) : `Stage ${s.currentStage || 2}`,
+          toStage: null,
+          toStageName: 'Terminal',
+          remarks: s.rejectionRemarks,
+          by: s.rejectedBy || 'Unknown',
+          byId: '',
+          byRole: '',
+          at: s.rejectedAt || s.updatedAt || s.createdAt
+        };
+      }
     });
     this._set('scr_requests', scrs);
-
-    // Approvals — rename approverName
-    const approvals = this._get('approvals') || [];
-    approvals.forEach(a => {
-      if (nameMap[a.approverName]) a.approverName = nameMap[a.approverName];
-    });
-    this._set('approvals', approvals);
-
-    // Audit log — rename performedBy
-    const audit = this._get('audit_log') || [];
-    audit.forEach(e => {
-      if (nameMap[e.performedBy]) e.performedBy = nameMap[e.performedBy];
-    });
-    this._set('audit_log', audit);
 
     this._set('migration_version', MIGRATION_VERSION);
     console.log('✅ SCR Store migrated to v' + MIGRATION_VERSION);

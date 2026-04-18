@@ -29,6 +29,7 @@ SCR FILES/
     ├── notifications.js       → Bell + panel + notifications page
     ├── dashboard.js           → Dashboard page (KPIs, charts)
     ├── scr-manager.js         → SCR list + detail + form + print
+    ├── dev-updates.js         → Developer progress journal (stage 5+)
     ├── approval.js            → Stage 4 AGM+CIO dual approval
     ├── feedback.js            → Feedback modal + ratings + page
     ├── self-service.js        → Requester portal
@@ -116,6 +117,14 @@ SCR FILES/
 - `handleAdvanceStage`, `handleRejectStage`, `handleCloseTicket`, `handleAcknowledge`
 - `printSCR(id)` — opens print-friendly template in new window
 - `renderPrintTemplate(scr)` — NABH-compliant printable form
+
+**dev-updates.js** — Developer progress journal (Stage 5+)
+- `add(scrId, {title, description, status, percentComplete})` — post update; gated to assigned developers only, stage 5+, not closed/rejected
+- `getForSCR(scrId)` — all updates newest first
+- `currentProgress(scrId)` — latest % complete from updates
+- `renderForSCR(scrId, scr)` — timeline strip (Assigned / Schedule / Completed) + progress bar + list of updates + "Add Update" button
+- `showForm(scrId)` — modal with title/description/status/percent fields
+- `handleSubmit(scrId)`, `handleDelete(updateId, scrId)`
 
 **approval.js** — Stage 4 dual approval
 - `approvalChain = ['agm_it', 'cio']` — both must approve to advance to stage 5
@@ -351,6 +360,7 @@ All keys are prefixed `scr_`:
 | `scr_approvals` | AGM+CIO decisions | `[{id, scrId, approverRole, approverName, decision, comments, timestamp}]` |
 | `scr_feedback` | Ratings | `[{id, scrId, q1..q5, avgScore, comments, submittedBy, timestamp}]` |
 | `scr_notifications` | Per-user notifs | `[{id, userId, message, type, scrId, read, timestamp}]` |
+| `scr_development_updates` | Dev progress journal | `[{id, scrId, authorId, authorName, title, description, status, percentComplete, timestamp}]` |
 | `scr_audit_log` | Compliance trail | `[{id, entityType, entityId, action, field, oldValue, newValue, performedBy, role, timestamp}]` |
 | `scr_sla_config` | SLA hours | `[{id, priority, maxHours}]` |
 | `scr_role_permissions` | Role matrix | `{admin: {pages, actions}, cio: {...}, ...}` |

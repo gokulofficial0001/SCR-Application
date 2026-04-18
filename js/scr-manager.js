@@ -225,6 +225,8 @@ const SCRManager = {
             </thead>
             <tbody>
               ${scrs.map(scr => {
+                const rej = scr.lastRejection;
+                const rejTooltip = rej ? `Rejected at ${rej.fromStageName} by ${rej.by}: ${String(rej.remarks || '').replace(/"/g, '\'')}` : '';
                 return `
                   <tr style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">
                     <td><span class="font-semi text-brand">${scr.scrNumber}</span></td>
@@ -233,7 +235,7 @@ const SCRManager = {
                     <td class="text-sm">${Utils.escapeHtml(scr.department)}</td>
                     <td class="text-sm" style="max-width:250px">${Utils.escapeHtml(Utils.truncate(scr.description, 60))}</td>
                     <td><span class="text-xs text-tertiary">${Utils.getStageName(scr.currentStage)}</span></td>
-                    <td>${Utils.statusBadge(scr.status)}</td>
+                    <td>${Utils.statusBadge(scr.status)} ${rej ? `<span data-tooltip="${Utils.escapeHtml(rejTooltip)}" style="margin-left:4px;cursor:help" aria-label="Rejection remarks">⚠️</span>` : ''}</td>
                     <td>${SLAEngine.renderIndicator(scr)}</td>
                     <td class="text-sm text-tertiary">${Utils.formatDate(scr.createdAt)}</td>
                   </tr>
@@ -326,6 +328,21 @@ const SCRManager = {
         ${Workflow.renderPipeline(scr)}
         ${SLAEngine.renderProgressBar(scr)}
       </div>
+
+      ${scr.lastRejection ? `
+      <!-- Rejection banner — visible on every screen that shows this SCR -->
+      <div class="card mb-4" style="border-left:4px solid var(--color-danger);background:rgba(184,52,30,0.04)">
+        <div class="card-body">
+          <div class="flex items-center" style="gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-2)">
+            <span style="font-size:1.5rem">⚠️</span>
+            <span class="font-bold" style="color:var(--color-danger-dark);font-size:var(--font-md)">Rejected at ${Utils.escapeHtml(scr.lastRejection.fromStageName || 'Unknown Stage')}</span>
+            ${Utils.badgeHtml(scr.status === 'Rejected' ? 'Terminal' : `Returned to ${scr.lastRejection.toStageName || ''}`, scr.status === 'Rejected' ? 'danger' : 'warning')}
+          </div>
+          <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;margin-bottom:var(--space-2);white-space:pre-wrap">"${Utils.escapeHtml(scr.lastRejection.remarks || '')}"</p>
+          <p class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.lastRejection.by || 'Unknown')} (${Utils.escapeHtml(Utils.getRoleLabel(scr.lastRejection.byRole || ''))}) · ${Utils.formatDateTime(scr.lastRejection.at)}</p>
+        </div>
+      </div>
+      ` : ''}
 
       <div class="scr-detail-grid">
         <!-- Main Column -->
@@ -487,6 +504,9 @@ const SCRManager = {
               </div>
             </div>
           </div>` : ''}
+
+          <!-- SECTION 7b: Development Updates (visible once stage ≥ 5) -->
+          ${DevUpdates.renderForSCR(scr.id, scr)}
 
           <!-- SECTION 8+9: Management Approval (Stage 4 only) -->
           ${(isApprover && scr.currentStage === 4) || scr.approvalStatus ? `
@@ -929,7 +949,7 @@ const SCRManager = {
         <div class="scr-form-section scr-section-impl">
           <div class="scr-form-section-title">
             <span class="scr-section-num impl">7</span>
-            <span>Developer Assignment</span>
+            <span>Developer Assignment & Timeline</span>
             <span class="scr-section-role-badge">Project Head</span>
           </div>
           <div class="scr-form-section-body">
@@ -949,14 +969,42 @@ const SCRManager = {
                 </select>
               </div>
             </div>
+
+            <!-- Project Head: development timeline -->
+            <div style="margin-top:var(--space-4);padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg)">
+              <p class="font-semi text-sm" style="margin-bottom:var(--space-3)">📅 Development Timeline</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Assigned On</label>
+                  <input type="date" class="form-input" id="scr-assigned-on" value="${scr.assignedOn || Utils.today()}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Schedule Date (target completion)</label>
+                  <input type="date" class="form-input" id="scr-schedule" value="${scr.scheduleDate || ''}">
+                </div>
+              </div>
+              <div class="form-group" style="max-width:400px">
+                <label class="form-label">Completed On</label>
+                <input type="date" class="form-input" id="scr-completed-on" value="${scr.completedOn || ''}">
+                <p class="form-help">Leave empty until QA sign-off. Developer posts progress updates during development.</p>
+              </div>
+            </div>
+
             <input type="hidden" id="scr-study-primary" value="${Utils.escapeHtml(scr.studyDoneByPrimary || '')}">
             <input type="hidden" id="scr-study-secondary" value="${Utils.escapeHtml(scr.studyDoneBySecondary || '')}">
+            <input type="hidden" id="scr-study-from" value="${scr.studyDateFrom || ''}">
+            <input type="hidden" id="scr-study-to" value="${scr.studyDateTo || ''}">
           </div>
         </div>
         ` : `<input type="hidden" id="scr-developer" value="${Utils.escapeHtml(scr.assignedDeveloper || '')}">
              <input type="hidden" id="scr-developer2" value="${Utils.escapeHtml(scr.assignedDeveloper2 || '')}">
              <input type="hidden" id="scr-study-primary" value="">
-             <input type="hidden" id="scr-study-secondary" value="">`}
+             <input type="hidden" id="scr-study-secondary" value="">
+             <input type="hidden" id="scr-assigned-on" value="${scr.assignedOn || ''}">
+             <input type="hidden" id="scr-study-from" value="${scr.studyDateFrom || ''}">
+             <input type="hidden" id="scr-study-to" value="${scr.studyDateTo || ''}">
+             <input type="hidden" id="scr-schedule" value="${scr.scheduleDate || ''}">
+             <input type="hidden" id="scr-completed-on" value="${scr.completedOn || ''}">`}
 
         <!-- ━━━━━━ SECTION 8: APPROVAL SECTION (Approvers) ━━━━━━ -->
         ${isApprover ? `
