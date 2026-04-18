@@ -348,7 +348,7 @@ const MasterData = {
     const pageLabels = {
       'dashboard':'Dashboard','scr-list':'SCR List','scr-detail':'SCR Detail','scr-create':'Create SCR',
       'approvals':'Approvals','feedback':'Feedback','audit':'Audit Trail','master-data':'Master Data',
-      'notifications':'Notifications','settings':'Settings','self-service':'Self Service Portal'
+      'notifications':'Notifications','settings':'Settings','self-service':'Home'
     };
     const actionLabels = {
       'create_scr':'Create SCR','edit_scr':'Edit SCR','delete_scr':'Delete SCR','assign_scr':'Assign SCR',

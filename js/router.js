@@ -57,7 +57,7 @@ const Router = {
       'master-data': 'Master Data',
       'notifications': 'Notifications',
       'settings': 'Settings',
-      'self-service': 'Self Service Portal'
+      'self-service': 'Home'
     };
     const headerTitle = document.getElementById('header-title');
     if (headerTitle) headerTitle.textContent = titles[page] || page;

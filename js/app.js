@@ -61,7 +61,7 @@ const App = {
               <div class="nav-section-title">Portal</div>
               <div class="nav-item" data-page="self-service" onclick="Router.navigate('self-service')">
                 <span class="nav-icon">🏠</span>
-                <span class="nav-label">Self Service</span>
+                <span class="nav-label">Home</span>
               </div>
             </div>
           ` : `
