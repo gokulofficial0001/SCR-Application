@@ -20,22 +20,33 @@ const App = {
       return;
     }
 
-    // Minimal mode — opened from Home quick-action cards in a new tab
-    // URL carries ?minimal=create-scr | track | feedback and gets a
-    // stripped-down shell showing only the requested section.
     const urlParams = new URL(window.location.href).searchParams;
+
+    // Minimal mode — opened from Home's Track / Feedback cards in a new tab.
+    // Stripped-down shell showing only the requested section.
     const minimalAction = urlParams.get('minimal');
     if (minimalAction) {
       this.renderMinimal(minimalAction);
       return;
     }
 
-    // Render app shell
+    // Render full app shell (sidebar + header + everything)
     this.renderShell();
 
-    // Navigate to default page
-    const defaultPage = Auth.getDefaultPage();
-    Router.navigate(defaultPage);
+    // New SCR tab flow — requester clicked "New Request" on Home.
+    // Navigate to the full scr-create screen and set a flag so the
+    // submit handler knows to show the success modal + redirect to Home
+    // instead of going to SCR detail.
+    const action = urlParams.get('action');
+    if (action === 'new-scr') {
+      sessionStorage.setItem('scr-new-tab-flow', '1');
+      Router.navigate('scr-create');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else {
+      // Normal flow — navigate to the user's default page
+      const defaultPage = Auth.getDefaultPage();
+      Router.navigate(defaultPage);
+    }
 
     // Update notification badge
     Notifications.updateBadge();

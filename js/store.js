@@ -283,7 +283,7 @@ const Store = {
       project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','view_audit'] },
       implementation: { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','close_ticket','view_audit'] },
       developer:      { pages: ['dashboard','scr-list','scr-detail','feedback','notifications'], actions: ['edit_scr','advance_stage'] },
-      requester:      { pages: ['self-service','scr-detail','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
+      requester:      { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
     });
 
     // Sample SCR Requests (with full 10-section fields)
@@ -599,7 +599,7 @@ const Store = {
   // ── Migrate legacy data to current schema ────────
   // Runs on every app init. Idempotent — safe to re-run.
   migrate() {
-    const MIGRATION_VERSION = 4;
+    const MIGRATION_VERSION = 5;
     const current = this._get('migration_version') || 0;
     if (current >= MIGRATION_VERSION) return;
 
@@ -666,6 +666,18 @@ const Store = {
         }
         if (Array.isArray(perms.admin.actions) && !perms.admin.actions.includes('view_reports')) {
           perms.admin.actions.push('view_reports');
+        }
+        this._set('role_permissions', perms);
+      }
+    }
+
+    // v4 → v5: grant requester access to scr-create page so their
+    // "New Request" card can open the full SCR Request form in a new tab
+    if (current < 5) {
+      const perms = this._get('role_permissions');
+      if (perms && perms.requester) {
+        if (Array.isArray(perms.requester.pages) && !perms.requester.pages.includes('scr-create')) {
+          perms.requester.pages.push('scr-create');
         }
         this._set('role_permissions', perms);
       }

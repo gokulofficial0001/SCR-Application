@@ -1212,7 +1212,7 @@ const SCRManager = {
 
         <!-- Submit / Save -->
         <div class="flex justify-between items-center mt-6">
-          <button type="button" class="btn btn-ghost" onclick="Router.navigate('scr-list')">← Cancel</button>
+          <button type="button" class="btn btn-ghost" onclick="Router.goBack()" title="Discard changes and go back">← Cancel</button>
           <button type="submit" class="btn btn-success btn-lg" id="scr-submit-btn">
             ${isEdit ? '💾 Update SCR' : '📋 Submit SCR'}
           </button>
@@ -1386,12 +1386,19 @@ const SCRManager = {
     });
 
     let result;
+    // Detect special-flow modes:
+    //  • minimal-shell (legacy Track/Feedback popup tabs)
+    //  • new-tab flow from requester Home "New Request" (full shell, but
+    //    needs to show success modal + redirect to Home instead of scr-detail)
     const isMinimal = document.body.dataset.mode === 'minimal';
+    const isNewTabFlow = sessionStorage.getItem('scr-new-tab-flow') === '1';
+    const useSuccessModal = isMinimal || isNewTabFlow;
 
     if (editId) {
       result = this.updateSCR(editId, data);
       if (result.success) {
-        if (isMinimal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+        if (useSuccessModal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+          sessionStorage.removeItem('scr-new-tab-flow');
           SelfService.showSuccessModal({
             icon: '✏️',
             title: 'Your Changes Have Been Saved',
@@ -1409,7 +1416,8 @@ const SCRManager = {
         let msg = `${result.scr.scrNumber} created successfully`;
         if (result.duplicates.length > 0) msg += ` (${result.duplicates.length} possible duplicates found)`;
 
-        if (isMinimal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+        if (useSuccessModal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
+          sessionStorage.removeItem('scr-new-tab-flow');
           SelfService.showSuccessModal({
             icon: '🎉',
             title: 'Your Request Has Been Submitted',

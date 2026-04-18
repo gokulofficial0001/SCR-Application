@@ -96,10 +96,14 @@ const SelfService = {
     `;
   },
 
-  // ── Open an action in a new TAB with a minimal focused view ──
+  // ── Open an action in a new TAB ──────────────────────────
+  // "New Request"  → opens full SCR Request screen (sidebar + all) via ?action=new-scr
+  // Track / Feedback → still use the minimal-shell view (no sidebar needed)
   openInNewWindow(action) {
     const base = window.location.pathname.replace(/[^/]*$/, '');
-    const url = `${base}?minimal=${encodeURIComponent(action)}`;
+    const url = action === 'create-scr'
+      ? `${base}?action=new-scr`
+      : `${base}?minimal=${encodeURIComponent(action)}`;
     // No size features → browser opens as a tab (not a popup window)
     const tab = window.open(url, '_blank');
     if (!tab) {
@@ -193,6 +197,13 @@ const SelfService = {
     };
     const titleColor = colorMap[color] || colorMap.success;
 
+    // Which "go Home" handler to use?
+    //  • minimal shell → reload via pathname (replaces the minimal wrapper)
+    //  • full shell    → Router.navigate('self-service') stays in same tab
+    const goHomeHandler = document.body.dataset.mode === 'minimal'
+      ? 'App.backToHomeFromMinimal()'
+      : "Router.navigate('self-service')";
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'success-modal';
@@ -206,7 +217,7 @@ const SelfService = {
             <p class="text-sm" style="font-style:italic;color:var(--color-text-secondary);line-height:1.5;margin:0">&ldquo;${Utils.escapeHtml(phrase)}&rdquo;</p>
             <p class="text-xs text-tertiary" style="margin:4px 0 0">— Hospital IT, SCR Team</p>
           </div>
-          <button class="btn btn-primary btn-lg" onclick="App.backToHomeFromMinimal()" style="min-width:200px">${Utils.escapeHtml(buttonLabel)}</button>
+          <button class="btn btn-primary btn-lg" onclick="${goHomeHandler}" style="min-width:200px">${Utils.escapeHtml(buttonLabel)}</button>
           ${autoRedirectSec > 0 ? `<p class="text-xs text-muted" style="margin-top:var(--space-3)">Returning to Home in <span id="success-countdown" style="font-weight:700">${autoRedirectSec}</span>s…</p>` : ''}
         </div>
       </div>
@@ -222,7 +233,11 @@ const SelfService = {
         if (counter) counter.textContent = sec;
         if (sec <= 0) {
           clearInterval(tick);
-          App.backToHomeFromMinimal();
+          if (document.body.dataset.mode === 'minimal') {
+            App.backToHomeFromMinimal();
+          } else {
+            Router.navigate('self-service');
+          }
         }
       }, 1000);
 

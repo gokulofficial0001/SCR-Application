@@ -30,7 +30,7 @@ const Auth = {
       actions: ['edit_scr', 'advance_stage']
     },
     requester: {
-      pages: ['self-service', 'scr-detail', 'feedback', 'notifications'],
+      pages: ['self-service', 'scr-detail', 'scr-create', 'feedback', 'notifications'],
       actions: ['create_scr', 'submit_feedback']
     }
   },
