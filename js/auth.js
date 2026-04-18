@@ -35,11 +35,42 @@ const Auth = {
     }
   },
 
+  // ── Rate-limit bookkeeping (in-memory, resets on reload) ──
+  _failedAttempts: {},
+  _lockoutUntil: {},
+
   // ── Login ───────────────────────────────────────────────
   login(username, password) {
+    if (!username || !password) {
+      return { success: false, error: 'Username and password required' };
+    }
+    const key = username.toLowerCase().trim();
+
+    // Lockout check — 5 failed attempts → 60s cooldown
+    const until = this._lockoutUntil[key] || 0;
+    if (until > Date.now()) {
+      const wait = Math.ceil((until - Date.now()) / 1000);
+      return { success: false, error: `Too many attempts. Try again in ${wait}s.` };
+    }
+
     const users = Store.getAll('users');
-    const user = users.find(u => u.username === username && u.password === password);
-    if (!user) return { success: false, error: 'Invalid username or password' };
+    const user = users.find(u =>
+      u.username.toLowerCase() === key && u.password === password
+    );
+    if (!user) {
+      this._failedAttempts[key] = (this._failedAttempts[key] || 0) + 1;
+      if (this._failedAttempts[key] >= 5) {
+        this._lockoutUntil[key] = Date.now() + 60 * 1000;
+        this._failedAttempts[key] = 0;
+        // Log lockout event for audit
+        Audit.log('User', key, 'Login Blocked', null, null, 'Too many attempts', key, 'anonymous');
+      }
+      return { success: false, error: 'Invalid username or password' };
+    }
+
+    // Success — clear any rate-limit state
+    delete this._failedAttempts[key];
+    delete this._lockoutUntil[key];
 
     const session = {
       id: user.id,

@@ -7,16 +7,27 @@ const SLAEngine = {
   getMaxHours(priority) {
     const config = Store.getAll('sla_config');
     const entry = config.find(c => c.priority === priority);
-    return entry ? entry.maxHours : 168; // default 7 days
+    const raw = entry ? entry.maxHours : 168;
+    const num = Number(raw);
+    // Guard against invalid / zero / negative config (division-by-zero, always-overdue)
+    return (isNaN(num) || num <= 0) ? 168 : num;
   },
 
   // ── Calculate SLA status for an SCR ─────────────────────
   calculate(scr) {
+    if (!scr) {
+      return { status: 'unknown', label: '—', percent: 0, color: 'neutral', remaining: 0 };
+    }
     if (scr.status === 'Closed' || scr.status === 'Rejected') {
       return { status: 'closed', label: 'Closed', percent: 100, color: 'neutral', remaining: 0 };
     }
     if (scr.status === 'Completed') {
       return { status: 'completed', label: 'Completed', percent: 100, color: 'success', remaining: 0 };
+    }
+
+    // Guard against missing/invalid createdAt (otherwise new Date(null) → 1970)
+    if (!Utils.isValidDate(scr.createdAt)) {
+      return { status: 'unknown', label: 'Pending', percent: 0, color: 'neutral', remaining: 0 };
     }
 
     const maxHours = this.getMaxHours(scr.priority);

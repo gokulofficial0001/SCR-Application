@@ -54,12 +54,12 @@ const SCRManager = {
       studyDateTo: data.studyDateTo || null,
       scheduleDate: data.scheduleDate || null,
       completedOn: data.completedOn || null,
-      // Section 8
+      // Section 8 — defaults to standard hospital approvers
       approvalStatus: data.approvalStatus || '',
       approvalReason: data.approvalReason || '',
-      projectHeadName: data.projectHeadName || '',
-      agmItName: data.agmItName || '',
-      cioName: data.cioName || '',
+      projectHeadName: data.projectHeadName || 'Ms. Deepa S',
+      agmItName: data.agmItName || 'Mr. S. Saravanakumar',
+      cioName: data.cioName || 'Mr. Biju Velayudhan',
       // Section 9
       remarkProjectHead: data.remarkProjectHead || '',
       remarkAgmIt: data.remarkAgmIt || '',
@@ -96,12 +96,25 @@ const SCRManager = {
     const old = Store.getById('scr_requests', id);
     if (!old) return { success: false, error: 'SCR not found' };
 
+    // Guard: terminal states are read-only (except for post-closure workflow fields)
+    if (old.status === 'Closed' || old.status === 'Rejected') {
+      return { success: false, error: `Cannot edit an SCR in "${old.status}" state` };
+    }
+
+    // Validate date ranges if present in updates
+    const from = updates.studyDateFrom ?? old.studyDateFrom;
+    const to = updates.studyDateTo ?? old.studyDateTo;
+    if (!Utils.isDateRangeValid(from, to)) {
+      return { success: false, error: 'Study Date To must be on or after Study Date From' };
+    }
+
     const scr = Store.update('scr_requests', id, updates);
 
-    // Track field changes
+    // Track field changes (skip timestamps, deep-nested fields)
     Object.keys(updates).forEach(field => {
-      if (old[field] !== updates[field] && !['updatedAt'].includes(field)) {
-        Audit.log('SCR', id, 'Updated', field, old[field], updates[field]);
+      const a = old[field], b = updates[field];
+      if (a !== b && !['updatedAt'].includes(field) && typeof a !== 'object' && typeof b !== 'object') {
+        Audit.log('SCR', id, 'Updated', field, a, b);
       }
     });
 
@@ -253,7 +266,25 @@ const SCRManager = {
       return `<div class="empty-state">
         <div class="empty-state-icon">🔍</div>
         <h3 class="empty-state-title">SCR Not Found</h3>
+        <p class="empty-state-text">This SCR does not exist or may have been removed.</p>
         <button class="btn btn-primary mt-4" onclick="Router.navigate('scr-list')">Back to List</button>
+      </div>`;
+    }
+
+    const currentUser = Auth.currentUser();
+    if (!currentUser) {
+      // Session lost mid-render — bounce to login
+      App.init();
+      return '';
+    }
+
+    // Access control: requesters can only view SCRs they created
+    if (currentUser.role === 'requester' && scr.createdBy !== currentUser.id) {
+      return `<div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <h3 class="empty-state-title">Access Denied</h3>
+        <p class="empty-state-text">You can only view SCRs that you have created.</p>
+        <button class="btn btn-primary mt-4" onclick="Router.navigate('self-service')">Back to My Requests</button>
       </div>`;
     }
 
@@ -265,7 +296,6 @@ const SCRManager = {
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isImpl = Auth.hasRole('implementation', 'admin');
-    const currentUser = Auth.currentUser();
     const isAssignedDev = Auth.hasRole('developer', 'admin') &&
       (scr.assignedDeveloper === currentUser.id || scr.assignedDeveloper2 === currentUser.id);
     const canAcknowledge = isAssignedDev && scr.currentStage === 5 && !scr.acknowledgedBy && scr.status !== 'Closed';
@@ -476,15 +506,15 @@ const SCRManager = {
               <div class="detail-grid">
                 <div class="detail-field">
                   <span class="detail-label">Project Head</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.projectHeadName || '—')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}</span>
                 </div>
                 <div class="detail-field">
                   <span class="detail-label">AGM – IT</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.agmItName || '—')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.agmItName || 'Mr. S. Saravanakumar')}</span>
                 </div>
                 <div class="detail-field" style="grid-column:span 2">
                   <span class="detail-label">CIO</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.cioName || '—')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}</span>
                 </div>
               </div>
               ${scr.remarkProjectHead || scr.remarkAgmIt || scr.remarkCio ? `
@@ -961,16 +991,16 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Project Head Name</label>
-                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || '')}" placeholder="Project Head full name">
+                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}" placeholder="Project Head full name">
               </div>
               <div class="form-group">
                 <label class="form-label">AGM – IT Name</label>
-                <input type="text" class="form-input" id="scr-agm-name" value="${Utils.escapeHtml(scr.agmItName || '')}" placeholder="AGM IT full name">
+                <input type="text" class="form-input" id="scr-agm-name" value="${Utils.escapeHtml(scr.agmItName || 'Mr. S. Saravanakumar')}" placeholder="AGM IT full name">
               </div>
             </div>
             <div class="form-group" style="max-width:400px">
               <label class="form-label">CIO Name</label>
-              <input type="text" class="form-input" id="scr-cio-name" value="${Utils.escapeHtml(scr.cioName || '')}" placeholder="CIO full name">
+              <input type="text" class="form-input" id="scr-cio-name" value="${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}" placeholder="CIO full name">
             </div>
           </div>
         </div>
@@ -1134,9 +1164,9 @@ const SCRManager = {
       studyDoneBySecondary: getVal('scr-study-secondary'),
       assignedDeveloper: getVal('scr-developer'),
       assignedDeveloper2: getVal('scr-developer2'),
-      assignedOn: getVal('scr-assigned-on') || null,
-      studyDateFrom: getVal('scr-study-from') || null,
-      studyDateTo: getVal('scr-study-to') || null,
+      assignedOn: getVal('scr-assigned-on') || (getVal('scr-developer') ? Utils.today() : null),
+      studyDateFrom: getVal('scr-study-from') || (getVal('scr-study-primary') ? Utils.today() : null),
+      studyDateTo: getVal('scr-study-to') || (getVal('scr-study-primary') ? (getVal('scr-study-from') || Utils.today()) : null),
       scheduleDate: getVal('scr-schedule') || null,
       completedOn: getVal('scr-completed-on') || null,
       // Section 8 (approvers)
@@ -1151,11 +1181,31 @@ const SCRManager = {
       remarkCio: getVal('scr-remark-cio'),
     };
 
-    // Validate required
-    if (!data.requestType || !data.intervention || !data.department || !data.description || !data.moduleName || !data.requestedBy) {
-      Utils.toast('error', 'Validation Error', 'Please fill all required fields (Request Type, Intervention, Module, Description, Department, Requested By)');
+    // Validate required (trim-aware — whitespace alone is not valid)
+    const requiredFields = [
+      ['requestType',  'Request Type'],
+      ['intervention', 'Intervention'],
+      ['department',   'Department'],
+      ['description',  'Description'],
+      ['moduleName',   'Module'],
+      ['requestedBy',  'Requested By']
+    ];
+    const missing = requiredFields.filter(([k]) => !Utils.isNonEmpty(data[k])).map(([, l]) => l);
+    if (missing.length > 0) {
+      Utils.toast('error', 'Validation Error', `Please fill: ${missing.join(', ')}`);
       return;
     }
+
+    // Date range sanity — studyDateFrom <= studyDateTo
+    if (!Utils.isDateRangeValid(data.studyDateFrom, data.studyDateTo)) {
+      Utils.toast('error', 'Invalid Date Range', 'Study Date To must be on or after Study Date From.');
+      return;
+    }
+
+    // Trim all string fields to prevent whitespace-only values sneaking through
+    Object.keys(data).forEach(k => {
+      if (typeof data[k] === 'string') data[k] = data[k].trim();
+    });
 
     let result;
     if (editId) {

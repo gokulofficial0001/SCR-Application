@@ -120,8 +120,8 @@ const Dashboard = {
             <h3 class="chart-title">🏢 By Department</h3>
           </div>
           <div id="dept-chart-container">
-            ${topDepts.map(([dept, count]) => {
-              const maxCount = topDepts[0][1];
+            ${topDepts.length === 0 ? '<p class="text-muted text-sm text-center p-4">No department data yet</p>' : topDepts.map(([dept, count]) => {
+              const maxCount = topDepts[0][1] || 1;
               const pct = Math.round((count / maxCount) * 100);
               return `
                 <div style="margin-bottom:var(--space-3)">
@@ -135,7 +135,6 @@ const Dashboard = {
                 </div>
               `;
             }).join('')}
-            ${topDepts.length === 0 ? '<p class="text-muted text-sm text-center p-4">No data</p>' : ''}
           </div>
         </div>
       </div>
@@ -268,8 +267,6 @@ const Dashboard = {
     const cy = size / 2;
     const outerR = 100;
     const innerR = 65;
-
-    let startAngle = -Math.PI / 2;
 
     // Animate
     let progress = 0;

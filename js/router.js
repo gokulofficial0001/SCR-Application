@@ -137,6 +137,7 @@ const Router = {
   // ── Settings page ───────────────────────────────────────
   renderSettings() {
     const user = Auth.currentUser();
+    if (!user) { App.init(); return ''; }
     return `
       <div class="page-header">
         <div class="page-header-left">
@@ -154,19 +155,19 @@ const Router = {
             <div class="detail-grid">
               <div class="detail-field">
                 <span class="detail-label">Name</span>
-                <span class="detail-value">${Utils.escapeHtml(user.name)}</span>
+                <span class="detail-value">${Utils.escapeHtml(user.name || '—')}</span>
               </div>
               <div class="detail-field">
                 <span class="detail-label">Role</span>
-                <span class="detail-value">${Utils.getRoleLabel(user.role)}</span>
+                <span class="detail-value">${Utils.escapeHtml(Utils.getRoleLabel(user.role))}</span>
               </div>
               <div class="detail-field">
                 <span class="detail-label">Email</span>
-                <span class="detail-value">${Utils.escapeHtml(user.email)}</span>
+                <span class="detail-value">${Utils.escapeHtml(user.email || '—')}</span>
               </div>
               <div class="detail-field">
                 <span class="detail-label">Department</span>
-                <span class="detail-value">${Utils.escapeHtml(user.department)}</span>
+                <span class="detail-value">${Utils.escapeHtml(user.department || '—')}</span>
               </div>
             </div>
           </div>

@@ -147,7 +147,9 @@ const MasterData = {
 
   // ── Department Form ─────────────────────────────────────
   showDeptForm(editId) {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
     const dept = editId ? Store.getById('departments', editId) : {};
+    if (editId && !dept) { Utils.toast('error', 'Not Found', 'Department no longer exists'); return; }
     const isEdit = !!editId;
 
     const overlay = document.createElement('div');
@@ -208,10 +210,27 @@ const MasterData = {
 
   async deleteDept(id) {
     const dept = Store.getById('departments', id);
-    const confirmed = await Utils.confirm('Delete Department?', `Remove "${dept?.name}"? This cannot be undone.`, 'danger');
+    if (!dept) return;
+
+    // Guard: cannot delete a department referenced by any SCR
+    const refs = Store.filter('scr_requests', s => s.department === dept.name);
+    if (refs.length > 0) {
+      Utils.toast('error', 'Cannot Delete',
+        `"${dept.name}" is referenced by ${refs.length} SCR${refs.length > 1 ? 's' : ''}. Reassign or archive those first.`);
+      return;
+    }
+
+    // Guard: must keep at least one department (forms need a valid option)
+    const total = Store.getAll('departments').length;
+    if (total <= 1) {
+      Utils.toast('error', 'Cannot Delete', 'At least one department must exist.');
+      return;
+    }
+
+    const confirmed = await Utils.confirm('Delete Department?', `Remove "${dept.name}"? This cannot be undone.`, 'danger');
     if (confirmed) {
       Store.remove('departments', id);
-      Audit.log('Department', id, 'Deleted', null, dept?.name, null);
+      Audit.log('Department', id, 'Deleted', null, dept.name, null);
       Utils.toast('success', 'Deleted', 'Department removed');
       Router.navigate('master-data');
     }
@@ -219,7 +238,9 @@ const MasterData = {
 
   // ── User Form ───────────────────────────────────────────
   showUserForm(editId) {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
     const user = editId ? Store.getById('users', editId) : {};
+    if (editId && !user) { Utils.toast('error', 'Not Found', 'User no longer exists'); return; }
     const isEdit = !!editId;
     const depts = Store.getAll('departments');
     const roles = Object.keys(Utils.roleLabels);
@@ -406,16 +427,29 @@ const MasterData = {
   // ── Save SLA config ─────────────────────────────────────
   saveSLA() {
     const config = Store.getAll('sla_config');
+    const invalid = [];
+    let updated = 0;
     config.forEach(cfg => {
       const input = document.getElementById(`sla-${cfg.priority}`);
-      if (input) {
-        const newVal = parseInt(input.value);
-        if (newVal > 0) {
-          Store.update('sla_config', cfg.id, { maxHours: newVal });
-        }
+      if (!input) return;
+      const newVal = parseInt(input.value, 10);
+      if (isNaN(newVal) || newVal < 1 || newVal > 8760) {
+        invalid.push(cfg.priority);
+        return;
+      }
+      if (newVal !== cfg.maxHours) {
+        Store.update('sla_config', cfg.id, { maxHours: newVal });
+        updated++;
       }
     });
-    Utils.toast('success', 'SLA Updated', 'SLA configuration saved');
-    Audit.log('System', 'sla_config', 'Updated', 'SLA Config', null, 'Updated');
+
+    if (invalid.length > 0) {
+      Utils.toast('error', 'Invalid SLA',
+        `${invalid.join(', ')} must be between 1 and 8760 hours.`);
+      return;
+    }
+
+    Utils.toast('success', 'SLA Updated', updated > 0 ? `${updated} SLA row(s) saved` : 'No changes');
+    if (updated > 0) Audit.log('System', 'sla_config', 'Updated', 'SLA Config', null, 'Updated');
   }
 };

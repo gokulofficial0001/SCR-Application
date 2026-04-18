@@ -7,6 +7,12 @@ const App = {
   init() {
     // Seed data if first run
     Store.seed();
+    // Backfill / rename legacy data in existing localStorage
+    Store.migrate();
+    // Trim old audit / notifications so quota stays healthy
+    Store.pruneRoutine();
+    // Cross-tab sync — listen for session changes and storage events
+    this._bindStorageSync();
 
     // Check authentication
     if (!Auth.isLoggedIn()) {
@@ -191,6 +197,55 @@ const App = {
     if (Auth.canAccessPage('settings')) {
       Router.navigate('settings');
     }
+  },
+
+  // ── Cross-tab sync ──────────────────────────────────────
+  // If user logs in/out in another tab, keep this tab consistent
+  _storageSyncBound: false,
+  _bindStorageSync() {
+    if (this._storageSyncBound) return;
+    this._storageSyncBound = true;
+    window.addEventListener('storage', (e) => {
+      if (!e.key) return;
+      // Session changed in another tab — re-init so UI matches truth
+      if (e.key === 'scr_session') {
+        const wasLoggedIn = !!e.oldValue;
+        const nowLoggedIn = !!e.newValue;
+        if (wasLoggedIn !== nowLoggedIn || e.oldValue !== e.newValue) {
+          // Close any open panels first
+          const panel = document.getElementById('notif-panel');
+          if (panel) panel.remove();
+          if (typeof Notifications !== 'undefined') Notifications.panelOpen = false;
+          this.init();
+        }
+      }
+      // Notifications updated in another tab — refresh badge
+      if (e.key === 'scr_notifications' && typeof Notifications !== 'undefined' && Auth.isLoggedIn()) {
+        Notifications.updateBadge();
+      }
+    });
+
+    // Escape key closes the topmost modal / notif panel
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const modals = document.querySelectorAll('.modal-overlay');
+      if (modals.length > 0) {
+        modals[modals.length - 1].remove();
+        return;
+      }
+      const notifPanel = document.getElementById('notif-panel');
+      if (notifPanel) {
+        notifPanel.remove();
+        if (typeof Notifications !== 'undefined') Notifications.panelOpen = false;
+      }
+    });
+
+    // Click on overlay (but not on the modal itself) closes modal
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        e.target.remove();
+      }
+    });
   }
 };
 

@@ -24,8 +24,19 @@ const Approval = {
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
     if (!this.approvalChain.includes(user.role)) return false;
 
-    // Already decided?
-    const existing = Store.filter('approvals', a => a.scrId === scrId && a.approverRole === user.role);
+    // Conflict-of-interest: an approver cannot sign off on their own request
+    if (scr.createdBy === user.id) return false;
+
+    // Already decided for THIS attempt at stage 4?
+    // Filter to decisions recorded after SCR entered current stage 4
+    const stageEntry = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 4)
+      .sort((a, b) => new Date(b.enteredAt) - new Date(a.enteredAt))[0];
+    const stageEnteredAt = stageEntry ? new Date(stageEntry.enteredAt).getTime() : 0;
+    const existing = Store.filter('approvals', a =>
+      a.scrId === scrId &&
+      a.approverRole === user.role &&
+      new Date(a.timestamp).getTime() >= stageEnteredAt
+    );
     return existing.length === 0;
   },
 
@@ -40,8 +51,10 @@ const Approval = {
   submitDecision(scrId, decision, comments) {
     const user = Auth.currentUser();
     if (!user) return { success: false, error: 'Not authenticated' };
-    if (!comments || !comments.trim()) return { success: false, error: 'Comments are required' };
+    if (!Utils.isNonEmpty(comments)) return { success: false, error: 'Comments are required' };
+    if (!['Approved', 'Rejected'].includes(decision)) return { success: false, error: 'Invalid decision' };
 
+    // Re-check permission inside the mutation to close tab-race window
     if (!this.canApprove(scrId)) return { success: false, error: 'You cannot submit a decision for this SCR' };
 
     Store.add('approvals', {
@@ -56,6 +69,7 @@ const Approval = {
     Audit.log('SCR', scrId, decision, 'decision', null, decision, user.name, user.role);
 
     const scr = Store.getById('scr_requests', scrId);
+    if (!scr) return { success: false, error: 'SCR no longer exists' };
 
     if (decision === 'Rejected') {
       // Rejection from either manager → back to Stage 2 with remarks

@@ -225,11 +225,11 @@ const Workflow = {
             <div class="timeline-item">
               <div class="timeline-dot ${isCompleted ? (isRejected ? 'danger' : 'success') : ''}"></div>
               <div class="timeline-content">
-                <div class="timeline-title">${stage ? stage.name : `Stage ${entry.stage}`}
+                <div class="timeline-title">${stage ? Utils.escapeHtml(stage.name) : `Stage ${entry.stage}`}
                   ${isRejected ? '<span class="badge badge-danger" style="font-size:10px;margin-left:4px">Returned</span>' : ''}
                 </div>
                 <div class="timeline-text">
-                  ${entry.action} ${user ? `by ${user.name}` : ''}
+                  ${Utils.escapeHtml(entry.action || '')} ${user ? `by ${Utils.escapeHtml(user.name)}` : '<span class="text-muted">(user unavailable)</span>'}
                   <br>Entered: ${Utils.formatDateTime(entry.enteredAt)}
                   ${entry.exitedAt ? `<br>Exited: ${Utils.formatDateTime(entry.exitedAt)}` : ' — In Progress'}
                   ${entry.notes ? `<br><em style="color:var(--color-text-tertiary)">${Utils.escapeHtml(entry.notes)}</em>` : ''}

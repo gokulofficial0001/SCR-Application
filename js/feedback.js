@@ -20,17 +20,44 @@ const Feedback = {
   // ── Submit feedback ─────────────────────────────────────
   submitFeedback(scrId, ratings, comments) {
     const user = Auth.currentUser();
-    const avg = Object.values(ratings).reduce((s, v) => s + v, 0) / Object.values(ratings).length;
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) return { success: false, error: 'SCR not found' };
+
+    // Only allowed on Closed or Completed SCRs
+    if (!['Closed', 'Completed'].includes(scr.status)) {
+      return { success: false, error: 'Feedback can only be submitted on completed or closed SCRs' };
+    }
+
+    // Only the requester (creator) or admin can submit — prevents dev rating own work
+    if (scr.createdBy !== user.id && user.role !== 'admin') {
+      return { success: false, error: 'Only the requester can submit feedback for this SCR' };
+    }
+
+    // Prevent duplicate feedback
+    const existing = Store.filter('feedback', f => f.scrId === scrId && f.submittedBy === user.id);
+    if (existing.length > 0) {
+      return { success: false, error: 'You have already submitted feedback for this SCR' };
+    }
+
+    // Validate all ratings present and in range 1-5
+    const keys = ['q1','q2','q3','q4','q5'];
+    for (const k of keys) {
+      const v = Number(ratings[k]);
+      if (!Number.isInteger(v) || v < 1 || v > 5) {
+        return { success: false, error: 'All questions must be rated 1-5' };
+      }
+    }
+
+    const avg = keys.reduce((s, k) => s + Number(ratings[k]), 0) / keys.length;
 
     const fb = Store.add('feedback', {
       scrId,
-      q1: ratings.q1,
-      q2: ratings.q2,
-      q3: ratings.q3,
-      q4: ratings.q4,
-      q5: ratings.q5,
+      q1: Number(ratings.q1), q2: Number(ratings.q2), q3: Number(ratings.q3),
+      q4: Number(ratings.q4), q5: Number(ratings.q5),
       avgScore: Math.round(avg * 10) / 10,
-      comments: comments || '',
+      comments: (comments || '').trim(),
       submittedBy: user.id,
       timestamp: Utils.nowISO()
     });
@@ -38,8 +65,7 @@ const Feedback = {
     Audit.log('SCR', scrId, 'Feedback Submitted', 'avgScore', null, avg.toFixed(1));
 
     // Notify developer
-    const scr = Store.getById('scr_requests', scrId);
-    if (scr && scr.assignedDeveloper) {
+    if (scr.assignedDeveloper) {
       Notifications.create(scr.assignedDeveloper, `Feedback received for ${scr.scrNumber}: ${avg.toFixed(1)}/5`, 'feedback', scrId);
     }
 
@@ -48,6 +74,10 @@ const Feedback = {
 
   // ── Show feedback form modal ────────────────────────────
   showForm(scrId) {
+    // Close any lingering modals first to prevent stacking
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+    this._ratings = {}; // reset rating state for a fresh form
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'feedback-modal';

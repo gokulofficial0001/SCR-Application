@@ -3,8 +3,21 @@
    ============================================================ */
 
 const Notifications = {
-  // ── Create notification ─────────────────────────────────
+  // ── Create notification (with duplicate dedup within last 60s) ──
   create(userId, message, type, scrId) {
+    if (!userId || !message) return null;
+    // Dedup: if same user/type/scrId message was created <60s ago and is still unread, skip
+    const cutoff = Date.now() - 60 * 1000;
+    const dupe = Store.filter('notifications', n =>
+      n.userId === userId &&
+      n.type === type &&
+      n.scrId === (scrId || null) &&
+      n.message === message &&
+      !n.read &&
+      new Date(n.timestamp).getTime() >= cutoff
+    );
+    if (dupe.length > 0) return dupe[0];
+
     return Store.add('notifications', {
       userId,
       message,

@@ -10,17 +10,68 @@ const Store = {
       const data = localStorage.getItem(`scr_${key}`);
       return data ? JSON.parse(data) : null;
     } catch (e) {
-      console.error(`Store._get(${key}) error:`, e);
+      console.error(`Store._get(${key}) error — data may be corrupted:`, e);
+      // Best-effort recovery: remove corrupted key so app can continue
+      try { localStorage.removeItem(`scr_${key}`); } catch {}
       return null;
     }
   },
 
   _set(key, value) {
+    const payload = JSON.stringify(value);
     try {
-      localStorage.setItem(`scr_${key}`, JSON.stringify(value));
+      localStorage.setItem(`scr_${key}`, payload);
     } catch (e) {
+      // QuotaExceededError or similar — try to recover by pruning
+      if (e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)) {
+        console.warn(`Store._set(${key}): quota exceeded, pruning logs…`);
+        this._prune();
+        try {
+          localStorage.setItem(`scr_${key}`, payload);
+          return;
+        } catch (e2) {
+          console.error(`Store._set(${key}) still failed after prune:`, e2);
+          if (typeof Utils !== 'undefined' && Utils.toast) {
+            Utils.toast('error', 'Storage Full', 'Local storage is full. Please export and clear old data.');
+          }
+          return;
+        }
+      }
       console.error(`Store._set(${key}) error:`, e);
     }
+  },
+
+  // ── Prune old audit/notification records to recover quota ──
+  _prune() {
+    // Keep last 500 audit entries + delete notifications older than 60 days
+    const cutoff = Date.now() - 60 * 86400000;
+    const audit = (this._get('audit_log') || []).slice(-500);
+    try { localStorage.setItem('scr_audit_log', JSON.stringify(audit)); } catch {}
+
+    const notifs = (this._get('notifications') || []).filter(n => {
+      if (!n.read) return true; // keep unread
+      const ts = new Date(n.timestamp).getTime();
+      return !isNaN(ts) && ts >= cutoff;
+    });
+    try { localStorage.setItem('scr_notifications', JSON.stringify(notifs)); } catch {}
+  },
+
+  // ── Routine pruning — called on app init ──
+  pruneRoutine() {
+    const audit = this._get('audit_log') || [];
+    if (audit.length > 2000) {
+      this._set('audit_log', audit.slice(-2000));
+    }
+
+    const now = Date.now();
+    const cutoff = now - 90 * 86400000;
+    const notifs = this._get('notifications') || [];
+    const kept = notifs.filter(n => {
+      if (!n.read) return true;
+      const ts = new Date(n.timestamp).getTime();
+      return !isNaN(ts) && ts >= cutoff;
+    });
+    if (kept.length !== notifs.length) this._set('notifications', kept);
   },
 
   getAll(collection) {
@@ -125,8 +176,22 @@ const Store = {
     const item = items.find(i => i.id === id);
     items = items.filter(i => i.id !== id);
     this._set(collection, items);
-    if (item) this._notify(collection, 'remove', item);
+    if (item) {
+      this._notify(collection, 'remove', item);
+      // Cascade: when an SCR is deleted, purge dependent records
+      if (collection === 'scr_requests') this._cascadeDeleteSCR(id);
+    }
     return item;
+  },
+
+  // ── Cascade cleanup: remove all dependent records for a deleted SCR ──
+  _cascadeDeleteSCR(scrId) {
+    ['workflow_stages', 'approvals', 'feedback', 'notifications'].forEach(coll => {
+      const items = (this._get(coll) || []).filter(r => r.scrId !== scrId);
+      this._set(coll, items);
+    });
+    // Audit log — mark SCR deletion but keep historic entries for compliance
+    // (NABH requires audit trail preservation; don't purge audit)
   },
 
   // ── Query helpers ───────────────────────────────────────
@@ -180,8 +245,8 @@ const Store = {
     // Users
     const users = [
       { id: 'user_admin', name: 'System Admin', username: 'admin', password: 'admin123', role: 'admin', email: 'admin@hospital.in', department: 'IT Department' },
-      { id: 'user_cio', name: 'Dr. Venkatesh R', username: 'cio', password: 'cio123', role: 'cio', email: 'venkatesh@hospital.in', department: 'IT Department' },
-      { id: 'user_agm', name: 'Mr. Prasad Kumar', username: 'agm', password: 'agm123', role: 'agm_it', email: 'prasad@hospital.in', department: 'IT Department' },
+      { id: 'user_cio', name: 'Mr. Biju Velayudhan', username: 'cio', password: 'cio123', role: 'cio', email: 'biju@hospital.in', department: 'IT Department' },
+      { id: 'user_agm', name: 'Mr. S. Saravanakumar', username: 'agm', password: 'agm123', role: 'agm_it', email: 'saravanakumar@hospital.in', department: 'IT Department' },
       { id: 'user_ph', name: 'Ms. Deepa S', username: 'projecthead', password: 'ph123', role: 'project_head', email: 'deepa@hospital.in', department: 'IT Department' },
       { id: 'user_impl', name: 'Mr. Arjun M', username: 'impl', password: 'impl123', role: 'implementation', email: 'arjun@hospital.in', department: 'IT Department' },
       { id: 'user_impl2', name: 'Mr. Suresh Kumar', username: 'impl2', password: 'impl123', role: 'implementation', email: 'suresh@hospital.in', department: 'IT Department' },
@@ -236,7 +301,7 @@ const Store = {
         assignedDeveloper: 'user_dev1', assignedDeveloper2: 'user_dev2',
         assignedOn: daysAgo(9).split('T')[0], studyDateFrom: daysAgo(9).split('T')[0], studyDateTo: daysAgo(8).split('T')[0],
         scheduleDate: daysAgo(6).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 5, status: 'In Progress',
@@ -258,7 +323,7 @@ const Store = {
         assignedDeveloper: 'user_dev2', assignedDeveloper2: '',
         assignedOn: daysAgo(12).split('T')[0], studyDateFrom: daysAgo(13).split('T')[0], studyDateTo: daysAgo(12).split('T')[0],
         scheduleDate: daysAgo(10).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 4, status: 'In Progress',
@@ -281,7 +346,7 @@ const Store = {
         assignedOn: daysAgo(20).split('T')[0], studyDateFrom: daysAgo(21).split('T')[0], studyDateTo: daysAgo(20).split('T')[0],
         scheduleDate: daysAgo(18).split('T')[0], completedOn: daysAgo(6).split('T')[0],
         approvalStatus: 'Approved', approvalReason: 'Report format meets requirements. Approved for deployment.',
-        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: 'Good implementation. Approved for deployment.',
         remarkAgmIt: 'Verified and approved by AGM-IT.',
         remarkCio: 'Final approval granted. Well done team.',
@@ -305,7 +370,7 @@ const Store = {
         assignedDeveloper: 'user_dev1', assignedDeveloper2: '',
         assignedOn: daysAgo(5).split('T')[0], studyDateFrom: daysAgo(6).split('T')[0], studyDateTo: daysAgo(5).split('T')[0],
         scheduleDate: daysAgo(3).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Implementation', attachments: [],
         currentStage: 3, status: 'In Progress',
@@ -328,7 +393,7 @@ const Store = {
         assignedOn: daysAgo(30).split('T')[0], studyDateFrom: daysAgo(31).split('T')[0], studyDateTo: daysAgo(30).split('T')[0],
         scheduleDate: daysAgo(28).split('T')[0], completedOn: daysAgo(12).split('T')[0],
         approvalStatus: 'Approved', approvalReason: 'All billing requirements met.',
-        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: 'Good implementation. Approved for deployment.',
         remarkAgmIt: 'Verified and approved.',
         remarkCio: 'Final approval granted.',
@@ -352,7 +417,7 @@ const Store = {
         assignedDeveloper: 'user_dev3', assignedDeveloper2: '',
         assignedOn: daysAgo(3).split('T')[0], studyDateFrom: daysAgo(4).split('T')[0], studyDateTo: daysAgo(3).split('T')[0],
         scheduleDate: daysAgo(2).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 5, status: 'In Progress',
@@ -373,7 +438,7 @@ const Store = {
         studyDoneByPrimary: '', studyDoneBySecondary: '',
         assignedDeveloper: '', assignedDeveloper2: '', assignedOn: null,
         studyDateFrom: null, studyDateTo: null, scheduleDate: null, completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: '', agmItName: '', cioName: '',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 1, status: 'Open',
@@ -394,7 +459,7 @@ const Store = {
         studyDoneByPrimary: '', studyDoneBySecondary: '',
         assignedDeveloper: '', assignedDeveloper2: '', assignedOn: null,
         studyDateFrom: null, studyDateTo: null, scheduleDate: null, completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: '', agmItName: '', cioName: '',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 2, status: 'Open',
@@ -416,7 +481,7 @@ const Store = {
         assignedDeveloper: 'user_dev1', assignedDeveloper2: '',
         assignedOn: daysAgo(15).split('T')[0], studyDateFrom: daysAgo(16).split('T')[0], studyDateTo: daysAgo(15).split('T')[0],
         scheduleDate: daysAgo(12).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Implementation', attachments: [],
         currentStage: 6, status: 'In Progress',
@@ -438,7 +503,7 @@ const Store = {
         assignedDeveloper: 'user_dev2', assignedDeveloper2: '',
         assignedOn: daysAgo(1).split('T')[0], studyDateFrom: daysAgo(2).split('T')[0], studyDateTo: daysAgo(1).split('T')[0],
         scheduleDate: Utils.today(), completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. Prasad Kumar', cioName: 'Dr. Venkatesh R',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 2, status: 'In Progress',
@@ -469,19 +534,19 @@ const Store = {
     // Sample approvals — Stage 4 (Management Approval: AGM + CIO both required)
     const approvals = [
       {
-        id: 'appr_1', scrId: 'scr_5', approverRole: 'agm_it', approverName: 'Mr. Prasad Kumar',
+        id: 'appr_1', scrId: 'scr_5', approverRole: 'agm_it', approverName: 'Mr. S. Saravanakumar',
         decision: 'Approved', comments: 'Verified and approved.', timestamp: daysAgo(9)
       },
       {
-        id: 'appr_2', scrId: 'scr_5', approverRole: 'cio', approverName: 'Dr. Venkatesh R',
+        id: 'appr_2', scrId: 'scr_5', approverRole: 'cio', approverName: 'Mr. Biju Velayudhan',
         decision: 'Approved', comments: 'Final approval granted. Well done team.', timestamp: daysAgo(8)
       },
       {
-        id: 'appr_3', scrId: 'scr_3', approverRole: 'agm_it', approverName: 'Mr. Prasad Kumar',
+        id: 'appr_3', scrId: 'scr_3', approverRole: 'agm_it', approverName: 'Mr. S. Saravanakumar',
         decision: 'Approved', comments: 'Report requirements met. Approved.', timestamp: daysAgo(5)
       },
       {
-        id: 'appr_4', scrId: 'scr_3', approverRole: 'cio', approverName: 'Dr. Venkatesh R',
+        id: 'appr_4', scrId: 'scr_3', approverRole: 'cio', approverName: 'Mr. Biju Velayudhan',
         decision: 'Approved', comments: 'Approved. Good work.', timestamp: daysAgo(5)
       }
     ];
@@ -502,7 +567,7 @@ const Store = {
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Ramesh Kumar', role: 'requester', timestamp: daysAgo(10) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Stage Advanced', field: 'currentStage', oldValue: 'Requirement Submission', newValue: 'Implementation Review', performedBy: 'Mr. Arjun M', role: 'implementation', timestamp: daysAgo(9) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_2', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Priya Sharma', role: 'requester', timestamp: daysAgo(14) },
-      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Approved', field: 'decision', oldValue: null, newValue: 'Approved', performedBy: 'Dr. Venkatesh R', role: 'cio', timestamp: daysAgo(8) },
+      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Approved', field: 'decision', oldValue: null, newValue: 'Approved', performedBy: 'Mr. Biju Velayudhan', role: 'cio', timestamp: daysAgo(8) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Status Changed', field: 'status', oldValue: 'Completed', newValue: 'Closed', performedBy: 'System', role: 'admin', timestamp: daysAgo(8) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_7', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Mr. Ganesh Babu', role: 'requester', timestamp: daysAgo(2) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_10', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Mr. Ganesh Babu', role: 'requester', timestamp: daysAgo(2) },
@@ -523,6 +588,54 @@ const Store = {
 
     this._set('seeded', true);
     console.log('✅ SCR Store seeded with demo data');
+  },
+
+  // ── Migrate legacy data to current approver names ────────
+  // Runs on every app init. Idempotent — safe to re-run.
+  migrate() {
+    const MIGRATION_VERSION = 2;
+    const current = this._get('migration_version') || 0;
+    if (current >= MIGRATION_VERSION) return;
+
+    // v1 → v2: rebrand AGM-IT and CIO users to real-world names
+    const nameMap = {
+      'Mr. Prasad Kumar': 'Mr. S. Saravanakumar',
+      'Dr. Venkatesh R':  'Mr. Biju Velayudhan'
+    };
+
+    // Users
+    const users = this._get('users') || [];
+    users.forEach(u => {
+      if (u.id === 'user_agm') { u.name = 'Mr. S. Saravanakumar'; u.email = 'saravanakumar@hospital.in'; }
+      if (u.id === 'user_cio') { u.name = 'Mr. Biju Velayudhan';  u.email = 'biju@hospital.in'; }
+    });
+    this._set('users', users);
+
+    // SCR requests — backfill empty approver names and rename old ones
+    const scrs = this._get('scr_requests') || [];
+    scrs.forEach(s => {
+      if (!s.projectHeadName) s.projectHeadName = 'Ms. Deepa S';
+      s.agmItName = nameMap[s.agmItName] || s.agmItName || 'Mr. S. Saravanakumar';
+      s.cioName   = nameMap[s.cioName]   || s.cioName   || 'Mr. Biju Velayudhan';
+    });
+    this._set('scr_requests', scrs);
+
+    // Approvals — rename approverName
+    const approvals = this._get('approvals') || [];
+    approvals.forEach(a => {
+      if (nameMap[a.approverName]) a.approverName = nameMap[a.approverName];
+    });
+    this._set('approvals', approvals);
+
+    // Audit log — rename performedBy
+    const audit = this._get('audit_log') || [];
+    audit.forEach(e => {
+      if (nameMap[e.performedBy]) e.performedBy = nameMap[e.performedBy];
+    });
+    this._set('audit_log', audit);
+
+    this._set('migration_version', MIGRATION_VERSION);
+    console.log('✅ SCR Store migrated to v' + MIGRATION_VERSION);
   },
 
   // ── Reset all data ──────────────────────────────────────

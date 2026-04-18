@@ -302,17 +302,21 @@ const SelfService = {
 
   handleQuickSubmit(e) {
     e.preventDefault();
-    const getVal = (id) => document.getElementById(id)?.value || '';
+    const getVal = (id) => (document.getElementById(id)?.value || '').trim();
 
-    // Collect attachments
+    // Collect attachments — sanitize names to prevent XSS via filename later
     const attInputs = document.querySelectorAll('.att-name-q');
     const attachments = [];
-    attInputs.forEach(inp => { if (inp.value.trim()) attachments.push({ name: inp.value.trim(), url: '' }); });
+    attInputs.forEach(inp => {
+      const name = inp.value.trim().slice(0, 200); // cap length
+      if (name) attachments.push({ name, url: '' });
+    });
 
+    const intervention = getVal('quick-intervention');
     const data = {
       requestType: getVal('quick-type'),
-      intervention: getVal('quick-intervention'),
-      priority: getVal('quick-intervention'),
+      intervention,
+      priority: intervention,
       moduleName: getVal('quick-module'),
       description: getVal('quick-desc'),
       reasonForChange: getVal('quick-reason'),
@@ -323,6 +327,19 @@ const SelfService = {
       department: getVal('quick-dept'),
       hodName: getVal('quick-hod'),
     };
+
+    // Validate required (trim-aware)
+    const missing = [];
+    if (!Utils.isNonEmpty(data.requestType))  missing.push('Request Type');
+    if (!Utils.isNonEmpty(data.intervention)) missing.push('Intervention');
+    if (!Utils.isNonEmpty(data.moduleName))   missing.push('Module');
+    if (!Utils.isNonEmpty(data.description))  missing.push('Description');
+    if (!Utils.isNonEmpty(data.department))   missing.push('Department');
+    if (!Utils.isNonEmpty(data.requestedBy))  missing.push('Requested By');
+    if (missing.length > 0) {
+      Utils.toast('error', 'Missing Fields', `Please fill: ${missing.join(', ')}`);
+      return;
+    }
 
     // Auto-fetch HOD fallback
     if (!data.hodName && data.department) {

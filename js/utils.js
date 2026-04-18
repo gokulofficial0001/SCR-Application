@@ -5,15 +5,54 @@
 const Utils = {
   // ── ID Generation ───────────────────────────────────────
   generateId() {
+    // Prefer crypto.randomUUID when available (modern browsers)
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return 'id_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+    }
     return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
   },
 
+  // Robust SCR number — parse actual sequence numbers to find max, not count
+  // Prevents collisions if an SCR is deleted or a year appears in a description
   generateSCRNumber() {
     const year = new Date().getFullYear();
     const existing = Store.getAll('scr_requests');
-    const thisYear = existing.filter(s => s.scrNumber && s.scrNumber.includes(year.toString()));
-    const seq = (thisYear.length + 1).toString().padStart(4, '0');
+    const pattern = new RegExp(`^SCR-${year}-(\\d+)$`);
+    let maxSeq = 0;
+    existing.forEach(s => {
+      if (!s.scrNumber) return;
+      const m = s.scrNumber.match(pattern);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxSeq) maxSeq = n;
+      }
+    });
+    const seq = (maxSeq + 1).toString().padStart(4, '0');
     return `SCR-${year}-${seq}`;
+  },
+
+  // ── Validation helpers ─────────────────────────────────
+  isNonEmpty(str) {
+    return typeof str === 'string' && str.trim().length > 0;
+  },
+
+  isValidDate(dateStr) {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return !isNaN(d.getTime());
+  },
+
+  isDateRangeValid(from, to) {
+    if (!from || !to) return true; // treat missing as acceptable
+    const f = new Date(from);
+    const t = new Date(to);
+    if (isNaN(f.getTime()) || isNaN(t.getTime())) return false;
+    return f <= t;
+  },
+
+  isValidEmail(str) {
+    if (!str) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str.trim());
   },
 
   // ── Date Formatting ─────────────────────────────────────
@@ -178,10 +217,17 @@ const Utils = {
     { id: 'dept_15', name: 'IT Department', hodName: 'Mr. Dinesh Kumar', hodEmail: 'dinesh@hospital.in' }
   ],
 
-  // ── Toast helper ────────────────────────────────────────
+  // ── Toast helper (capped to 4 visible to avoid spam) ────
   toast(type, title, message) {
     const container = document.getElementById('toast-container');
     if (!container) return;
+
+    // Cap concurrent toasts — oldest gets dismissed early
+    const existing = container.querySelectorAll('.toast:not(.toast-exit)');
+    if (existing.length >= 4) {
+      existing[0].classList.add('toast-exit');
+      setTimeout(() => existing[0].remove(), 300);
+    }
 
     const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
     const toast = document.createElement('div');
