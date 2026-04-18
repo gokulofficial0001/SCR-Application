@@ -149,7 +149,10 @@ const Notifications = {
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Notifications</h2>
+          <div class="flex items-center gap-3">
+            ${Router.renderBackButton()}
+            <h2 class="page-title">Notifications</h2>
+          </div>
           <p class="page-description">All your notifications in one place</p>
         </div>
         <button class="btn btn-ghost" onclick="Notifications.markAllRead();Router.navigate('notifications')">

@@ -41,37 +41,53 @@ const Dashboard = {
       ? (feedback.reduce((s, f) => s + f.avgScore, 0) / feedback.length).toFixed(1)
       : '—';
 
+    // Pre-computed status counts (used in donut legend)
+    const statusCounts = {
+      'Open': open,
+      'In Progress': inProgress,
+      'Completed': scrs.filter(s => s.status === 'Completed').length,
+      'Closed': scrs.filter(s => s.status === 'Closed').length,
+      'On Hold': scrs.filter(s => s.status === 'On Hold').length,
+      'Rejected': scrs.filter(s => s.status === 'Rejected').length
+    };
+
+    const canViewReports = Auth.canAccessPage('reports');
+    const canViewFeedback = Auth.canAccessPage('feedback');
+
     return `
-      <!-- Welcome Banner -->
+      <!-- Welcome Banner (drilldown links on overdue + at-risk counts) -->
       <div class="welcome-banner">
         <h2 class="welcome-title">Welcome back, ${Utils.escapeHtml(user.name)} 👋</h2>
         <p class="welcome-text">Here's what's happening with your SCR system today. You have
-          <strong>${slaSummary.breached} overdue</strong> and <strong>${slaSummary.atRisk} at-risk</strong> requests.</p>
+          <strong style="cursor:pointer;text-decoration:underline dotted" title="View all overdue" onclick="SCRManager.drillTo({slaStatus:'breached'})">${slaSummary.breached} overdue</strong>
+          and
+          <strong style="cursor:pointer;text-decoration:underline dotted" title="View all at-risk" onclick="SCRManager.drillTo({slaStatus:'at-risk'})">${slaSummary.atRisk} at-risk</strong>
+          requests.</p>
       </div>
 
-      <!-- KPI Cards -->
+      <!-- KPI Cards (every card drills into SCR list with appropriate filter) -->
       <div class="dashboard-kpis stagger-children">
-        <div class="kpi-card primary" onclick="SCRManager.filters.status='all';Router.navigate('scr-list')" style="cursor:pointer">
+        <div class="kpi-card primary" onclick="SCRManager.drillTo({})" style="cursor:pointer" title="View all SCRs">
           <div class="kpi-icon">📋</div>
           <div class="kpi-value">${total}</div>
           <div class="kpi-label">Total SCRs</div>
         </div>
-        <div class="kpi-card success" onclick="SCRManager.filters.status='Open';Router.navigate('scr-list')" style="cursor:pointer">
+        <div class="kpi-card success" onclick="SCRManager.drillTo({status:'Open'})" style="cursor:pointer" title="View Open SCRs">
           <div class="kpi-icon">📂</div>
           <div class="kpi-value">${open}</div>
           <div class="kpi-label">Open</div>
         </div>
-        <div class="kpi-card info" onclick="SCRManager.filters.status='In Progress';Router.navigate('scr-list')" style="cursor:pointer">
+        <div class="kpi-card info" onclick="SCRManager.drillTo({status:'In Progress'})" style="cursor:pointer" title="View In Progress SCRs">
           <div class="kpi-icon">⚙️</div>
           <div class="kpi-value">${inProgress}</div>
           <div class="kpi-label">In Progress</div>
         </div>
-        <div class="kpi-card warning">
+        <div class="kpi-card warning" onclick="SCRManager.drillTo({status:'Closed,Completed'})" style="cursor:pointer" title="View Completed / Closed SCRs">
           <div class="kpi-icon">✅</div>
           <div class="kpi-value">${completed}</div>
           <div class="kpi-label">Completed</div>
         </div>
-        <div class="kpi-card danger">
+        <div class="kpi-card danger" onclick="SCRManager.drillTo({slaStatus:'breached'})" style="cursor:pointer" title="View all overdue SCRs">
           <div class="kpi-icon">🔴</div>
           <div class="kpi-value">${slaSummary.breached}</div>
           <div class="kpi-label">Overdue</div>
@@ -83,30 +99,40 @@ const Dashboard = {
         <div class="chart-card">
           <div class="chart-header">
             <h3 class="chart-title">📊 SCR Status Distribution</h3>
+            <button class="btn btn-ghost btn-sm" onclick="SCRManager.drillTo({})" title="View all">View All →</button>
           </div>
-          <div style="display:flex;align-items:center;gap:var(--space-8)">
+          <div style="display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap">
             <div class="chart-canvas-container" style="width:220px;height:220px;flex-shrink:0;position:relative">
               <canvas id="status-chart"></canvas>
-              <div class="donut-center">
+              <div class="donut-center" style="cursor:pointer" onclick="SCRManager.drillTo({})" title="View all SCRs">
                 <div class="donut-center-value">${total}</div>
                 <div class="donut-center-label">Total</div>
               </div>
             </div>
-            <div style="flex:1">
-              <div class="chart-legend" style="flex-direction:column;gap:var(--space-3)">
-                <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Open (${open})</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>In Progress (${inProgress})</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Completed (${scrs.filter(s => s.status === 'Completed').length})</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div>Closed (${scrs.filter(s => s.status === 'Closed').length})</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>On Hold (${scrs.filter(s => s.status === 'On Hold').length})</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Rejected (${scrs.filter(s => s.status === 'Rejected').length})</div>
+            <div style="flex:1;min-width:180px">
+              <!-- Every legend item drills into that specific status -->
+              <div class="chart-legend" style="flex-direction:column;gap:var(--space-2)">
+                ${[
+                  ['Open',        '#10b981'],
+                  ['In Progress', '#3b82f6'],
+                  ['Completed',   '#8b5cf6'],
+                  ['Closed',      '#64748b'],
+                  ['On Hold',     '#f59e0b'],
+                  ['Rejected',    '#ef4444']
+                ].map(([label, color]) => `
+                  <div class="legend-item dashboard-drill" style="cursor:pointer;padding:4px 8px;border-radius:6px;transition:background 0.15s" onclick="SCRManager.drillTo({status:'${label}'})" title="View ${label}">
+                    <div class="legend-dot" style="background:${color}"></div>
+                    <span>${label}</span>
+                    <span class="font-semi" style="margin-left:auto">${statusCounts[label]}</span>
+                  </div>
+                `).join('')}
               </div>
               <div class="quick-stats mt-6" style="flex-wrap:wrap">
-                <div class="quick-stat">
+                <div class="quick-stat" ${canViewReports ? 'onclick="Router.navigate(\'reports\')" style="cursor:pointer" title="Open reports"' : ''}>
                   <div class="quick-stat-value">${avgResolution}h</div>
                   <div class="quick-stat-label">Avg Resolution</div>
                 </div>
-                <div class="quick-stat">
+                <div class="quick-stat" ${canViewFeedback ? 'onclick="Router.navigate(\'feedback\')" style="cursor:pointer" title="Open feedback"' : ''}>
                   <div class="quick-stat-value">${avgFeedback}</div>
                   <div class="quick-stat-label">Avg Rating</div>
                 </div>
@@ -115,6 +141,7 @@ const Dashboard = {
           </div>
         </div>
 
+        <!-- Department bars — each row drills into that department -->
         <div class="chart-card">
           <div class="chart-header">
             <h3 class="chart-title">🏢 By Department</h3>
@@ -124,7 +151,7 @@ const Dashboard = {
               const maxCount = topDepts[0][1] || 1;
               const pct = Math.round((count / maxCount) * 100);
               return `
-                <div style="margin-bottom:var(--space-3)">
+                <div class="dashboard-drill" style="margin-bottom:var(--space-3);cursor:pointer;padding:6px 8px;border-radius:6px;transition:background 0.15s" onclick="SCRManager.drillTo({department:'${String(dept).replace(/'/g,'\\\'')}'})" title="View ${Utils.escapeHtml(dept)} SCRs">
                   <div class="flex justify-between mb-1">
                     <span class="text-sm text-secondary">${Utils.escapeHtml(Utils.truncate(dept, 18))}</span>
                     <span class="text-sm font-semi">${count}</span>
@@ -141,29 +168,30 @@ const Dashboard = {
 
       <!-- Bottom Row -->
       <div class="dashboard-bottom">
-        <!-- Recent SCRs -->
+        <!-- Recent SCRs — each item already drills into detail -->
         <div class="chart-card">
           <div class="chart-header">
             <h3 class="chart-title">🕐 Recent Requests</h3>
-            <button class="btn btn-ghost btn-sm" onclick="Router.navigate('scr-list')">View All →</button>
+            <button class="btn btn-ghost btn-sm" onclick="SCRManager.drillTo({})">View All →</button>
           </div>
           ${recentSCRs.length === 0 ? '<p class="text-muted text-sm text-center p-4">No SCRs yet</p>' : `
             <div>
               ${recentSCRs.map(scr => `
-                <div class="activity-item" style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">
+                <div class="activity-item" style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})" title="Open ${Utils.escapeHtml(scr.scrNumber)}">
                   <div class="activity-icon ${scr.status === 'Open' ? 'create' : scr.status === 'In Progress' ? 'update' : 'close'}">
                     ${scr.status === 'Open' ? '📂' : scr.status === 'In Progress' ? '⚙️' : '✅'}
                   </div>
                   <div class="activity-content">
                     <div class="activity-text">
-                      <strong>${scr.scrNumber}</strong> — ${Utils.truncate(scr.description, 40)}
+                      <strong>${scr.scrNumber}</strong> — ${Utils.escapeHtml(Utils.truncate(scr.description, 40))}
                     </div>
                     <div class="activity-time">
-                      ${scr.department} · ${Utils.formatTimeAgo(scr.createdAt)}
+                      <span onclick="event.stopPropagation();SCRManager.drillTo({department:'${String(scr.department).replace(/'/g,'\\\'')}'})" style="cursor:pointer;text-decoration:underline dotted" title="View dept">${Utils.escapeHtml(scr.department)}</span>
+                      · ${Utils.formatTimeAgo(scr.createdAt)}
                       ${SLAEngine.renderIndicator(scr)}
                     </div>
                   </div>
-                  <div>
+                  <div onclick="event.stopPropagation();SCRManager.drillTo({priority:'${scr.priority}'})" title="View ${scr.priority} priority" style="cursor:pointer">
                     ${Utils.priorityBadge(scr.priority)}
                   </div>
                 </div>
@@ -174,20 +202,21 @@ const Dashboard = {
 
         <!-- Right Column: Dev Workload + Overdue -->
         <div style="display:flex;flex-direction:column;gap:var(--space-4)">
-          <!-- Developer Workload -->
+
+          <!-- Developer Workload — each row drills into that developer's SCRs -->
           <div class="chart-card">
             <div class="chart-header">
               <h3 class="chart-title">👨‍💻 Developer Workload</h3>
             </div>
             ${devWorkload.length === 0 ? '<p class="text-muted text-sm text-center p-4">No developers</p>' : `
               ${devWorkload.map(d => `
-                <div class="workload-item">
+                <div class="workload-item dashboard-drill" style="cursor:pointer;padding:6px 8px;border-radius:6px;transition:background 0.15s" onclick="SCRManager.drillTo({assignedDeveloper:'${d.id}'})" title="View SCRs assigned to ${Utils.escapeHtml(d.name)}">
                   <div class="workload-avatar">${Utils.getInitials(d.name)}</div>
                   <div class="workload-info">
                     <div class="workload-name">${Utils.escapeHtml(d.name)}</div>
                     <div class="workload-bar">
                       <div class="progress-bar" style="flex:1;height:6px">
-                        <div class="progress-fill ${d.activeCount > 3 ? 'danger' : d.activeCount > 1 ? 'warning' : ''}" 
+                        <div class="progress-fill ${d.activeCount > 3 ? 'danger' : d.activeCount > 1 ? 'warning' : ''}"
                           style="width:${Math.min(100, d.activeCount * 20)}%"></div>
                       </div>
                       <span class="workload-count">${d.activeCount}</span>
@@ -198,21 +227,22 @@ const Dashboard = {
             `}
           </div>
 
-          <!-- Overdue -->
+          <!-- Overdue — header drills into full breach list; each item opens detail -->
           ${overdue.length > 0 ? `
             <div class="chart-card" style="border-color:rgba(239,68,68,0.3)">
               <div class="chart-header">
-                <h3 class="chart-title" style="color:var(--color-danger-light)">⚠️ Overdue (${overdue.length})</h3>
+                <h3 class="chart-title" style="color:var(--color-danger-dark);cursor:pointer;text-decoration:underline dotted" onclick="SCRManager.drillTo({slaStatus:'breached'})" title="View all overdue">⚠️ Overdue (${overdue.length})</h3>
+                <button class="btn btn-ghost btn-sm" onclick="SCRManager.drillTo({slaStatus:'breached'})">View All →</button>
               </div>
               ${overdue.slice(0, 4).map(scr => {
                 const sla = SLAEngine.calculate(scr);
                 return `
-                  <div class="overdue-item" style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">
+                  <div class="overdue-item" style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})" title="Open ${Utils.escapeHtml(scr.scrNumber)}">
                     <div>
-                      <div class="overdue-scr">${scr.scrNumber}</div>
-                      <div class="overdue-dept">${scr.department}</div>
+                      <div class="overdue-scr">${Utils.escapeHtml(scr.scrNumber)}</div>
+                      <div class="overdue-dept">${Utils.escapeHtml(scr.department)}</div>
                     </div>
-                    <div class="overdue-time">${sla.label}</div>
+                    <div class="overdue-time">${Utils.escapeHtml(sla.label)}</div>
                   </div>
                 `;
               }).join('')}
@@ -228,6 +258,11 @@ const Dashboard = {
           `}
         </div>
       </div>
+
+      <!-- Drill-down hover affordance -->
+      <style>
+        .dashboard-drill:hover { background: rgba(61,95,184,0.08); }
+      </style>
     `;
   },
 

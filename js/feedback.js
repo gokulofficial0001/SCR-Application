@@ -207,7 +207,10 @@ const Feedback = {
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Feedback</h2>
+          <div class="flex items-center gap-3">
+            ${Router.renderBackButton()}
+            <h2 class="page-title">Feedback</h2>
+          </div>
           <p class="page-description">User satisfaction ratings and improvement tracking</p>
         </div>
       </div>

@@ -6,9 +6,32 @@ const SCRManager = {
   // ── Current filters state ───────────────────────────────
   filters: {
     search: '',
-    status: 'all',
+    status: 'all',            // 'all' | 'Open' | 'In Progress' | ... | comma-separated like 'Closed,Completed'
     priority: 'all',
-    department: 'all'
+    department: 'all',
+    assignedDeveloper: 'all', // filter by developer ID
+    slaStatus: 'all'          // 'all' | 'breached' | 'at-risk' | 'on-track'
+  },
+
+  // ── Reset + apply filters, then navigate to list (drilldown helper) ──
+  drillTo(newFilters = {}) {
+    this.filters = {
+      search: '',
+      status: 'all',
+      priority: 'all',
+      department: 'all',
+      assignedDeveloper: 'all',
+      slaStatus: 'all',
+      ...newFilters
+    };
+    Router.navigate('scr-list');
+  },
+
+  // ── Clear a single filter chip ──
+  clearFilter(key) {
+    if (!(key in this.filters)) return;
+    this.filters[key] = key === 'search' ? '' : 'all';
+    Router.navigate('scr-list');
   },
 
   // ── Create SCR ──────────────────────────────────────────
@@ -129,19 +152,31 @@ const SCRManager = {
   // ── Get filtered SCRs ──────────────────────────────────
   getFiltered() {
     let scrs = Store.getAll('scr_requests');
-    const { search, status, priority, department } = this.filters;
+    const { search, status, priority, department, assignedDeveloper, slaStatus } = this.filters;
 
     if (search) {
       const q = search.toLowerCase();
-      scrs = scrs.filter(s => 
+      scrs = scrs.filter(s =>
         s.scrNumber.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
         s.department.toLowerCase().includes(q)
       );
     }
-    if (status !== 'all') scrs = scrs.filter(s => s.status === status);
-    if (priority !== 'all') scrs = scrs.filter(s => s.priority === priority);
+    // Status supports comma-separated list (e.g. 'Closed,Completed' for all finished SCRs)
+    if (status && status !== 'all') {
+      const list = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (list.length) scrs = scrs.filter(s => list.includes(s.status));
+    }
+    if (priority !== 'all')  scrs = scrs.filter(s => s.priority === priority);
     if (department !== 'all') scrs = scrs.filter(s => s.department === department);
+
+    if (assignedDeveloper && assignedDeveloper !== 'all') {
+      scrs = scrs.filter(s => s.assignedDeveloper === assignedDeveloper || s.assignedDeveloper2 === assignedDeveloper);
+    }
+
+    if (slaStatus && slaStatus !== 'all') {
+      scrs = scrs.filter(s => SLAEngine.calculate(s).status === slaStatus);
+    }
 
     // Role-based filtering for requester
     const user = Auth.currentUser();
@@ -157,10 +192,33 @@ const SCRManager = {
     const scrs = this.getFiltered();
     const depts = Store.getAll('departments');
 
+    // Active drill-down chips (for filters that don't have their own dropdown)
+    const activeChips = [];
+    if (this.filters.assignedDeveloper && this.filters.assignedDeveloper !== 'all') {
+      const dev = Store.getById('users', this.filters.assignedDeveloper);
+      activeChips.push({
+        key: 'assignedDeveloper',
+        label: `Developer: ${dev ? dev.name : this.filters.assignedDeveloper}`
+      });
+    }
+    if (this.filters.slaStatus && this.filters.slaStatus !== 'all') {
+      const slaLabels = { breached: 'SLA Breached', 'at-risk': 'At Risk', 'on-track': 'On Track' };
+      activeChips.push({
+        key: 'slaStatus',
+        label: slaLabels[this.filters.slaStatus] || this.filters.slaStatus
+      });
+    }
+    if (this.filters.status && this.filters.status.includes(',')) {
+      activeChips.push({ key: 'status', label: `Status: ${this.filters.status}` });
+    }
+
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">SCR Requests</h2>
+          <div class="flex items-center gap-3">
+            ${Router.renderBackButton()}
+            <h2 class="page-title">SCR Requests</h2>
+          </div>
           <p class="page-description">Manage all software change requests</p>
         </div>
         ${Auth.canPerformAction('create_scr') ? `
@@ -169,6 +227,19 @@ const SCRManager = {
           </button>
         ` : ''}
       </div>
+
+      ${activeChips.length > 0 ? `
+        <div class="flex items-center" style="gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4);padding:var(--space-3) var(--space-4);background:var(--color-primary-subtle);border:1px solid rgba(61,95,184,0.2);border-radius:var(--radius-lg)">
+          <span class="text-sm font-semi" style="color:var(--color-primary-dark)">Active drill-down:</span>
+          ${activeChips.map(c => `
+            <span class="badge primary" style="gap:6px">
+              ${Utils.escapeHtml(c.label)}
+              <button onclick="SCRManager.clearFilter('${c.key}')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-weight:bold" title="Remove filter">✕</button>
+            </span>
+          `).join('')}
+          <button class="btn btn-ghost btn-sm" onclick="SCRManager.drillTo({})" style="margin-left:auto">Clear all filters</button>
+        </div>
+      ` : ''}
 
       <div class="filter-bar">
         <div class="search-bar" style="flex:1;max-width:300px">
@@ -306,7 +377,7 @@ const SCRManager = {
       <div class="page-header">
         <div class="page-header-left">
           <div class="flex items-center gap-3">
-            <button class="btn btn-ghost btn-sm" onclick="Router.navigate('scr-list')">← Back</button>
+            <button class="btn btn-ghost btn-sm" onclick="Router.goBack()" title="Go back">← Back</button>
             <h2 class="page-title">${scr.scrNumber}</h2>
             ${Utils.priorityBadge(scr.intervention || scr.priority)}
             ${Utils.statusBadge(scr.status)}
@@ -508,11 +579,53 @@ const SCRManager = {
           <!-- SECTION 7b: Development Updates (visible once stage ≥ 5) -->
           ${DevUpdates.renderForSCR(scr.id, scr)}
 
-          <!-- SECTION 8+9: Management Approval (Stage 4 only) -->
+          <!-- SECTION 9a: Review Remarks — ALWAYS visible once any remark exists (PH / AGM / CIO) -->
+          ${scr.remarkProjectHead || scr.remarkAgmIt || scr.remarkCio ? `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📝 Review Remarks</h3>
+            </div>
+            <div class="card-body">
+              <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+                ${scr.remarkProjectHead ? `
+                  <div style="padding:var(--space-3);background:var(--color-bg-surface);border:1px solid var(--color-border);border-left:3px solid var(--color-primary);border-radius:var(--radius-md)">
+                    <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
+                      <span style="font-size:1.1rem">👤</span>
+                      <span class="font-bold text-sm">Project Head</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkProjectHead)}</p>
+                  </div>
+                ` : ''}
+                ${scr.remarkAgmIt ? `
+                  <div style="padding:var(--space-3);background:var(--color-bg-surface);border:1px solid var(--color-border);border-left:3px solid var(--color-info);border-radius:var(--radius-md)">
+                    <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
+                      <span style="font-size:1.1rem">📊</span>
+                      <span class="font-bold text-sm">AGM – IT</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.agmItName || 'Mr. S. Saravanakumar')}</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkAgmIt)}</p>
+                  </div>
+                ` : ''}
+                ${scr.remarkCio ? `
+                  <div style="padding:var(--space-3);background:var(--color-bg-surface);border:1px solid var(--color-border);border-left:3px solid var(--color-success);border-radius:var(--radius-md)">
+                    <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
+                      <span style="font-size:1.1rem">🏛️</span>
+                      <span class="font-bold text-sm">CIO</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkCio)}</p>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>` : ''}
+
+          <!-- SECTION 8: Management Approval (Stage 4 panel + decision) -->
           ${(isApprover && scr.currentStage === 4) || scr.approvalStatus ? `
           <div class="card">
             <div class="card-header">
-              <h3 class="card-title">✅ Approvals & Remarks</h3>
+              <h3 class="card-title">✅ Management Approval</h3>
             </div>
             <div class="card-body">
               ${scr.approvalStatus ? `
@@ -537,13 +650,6 @@ const SCRManager = {
                   <span class="detail-value">${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}</span>
                 </div>
               </div>
-              ${scr.remarkProjectHead || scr.remarkAgmIt || scr.remarkCio ? `
-              <div style="margin-top:var(--space-4);border-top:var(--glass-border);padding-top:var(--space-4)">
-                <p class="font-semi text-secondary mb-3">Remarks</p>
-                ${scr.remarkProjectHead ? `<div class="mb-3"><span class="form-label" style="margin-bottom:2px">Project Head</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkProjectHead)}</p></div>` : ''}
-                ${scr.remarkAgmIt ? `<div class="mb-3"><span class="form-label" style="margin-bottom:2px">AGM – IT</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkAgmIt)}</p></div>` : ''}
-                ${scr.remarkCio ? `<div><span class="form-label" style="margin-bottom:2px">CIO</span><p class="text-sm" style="color:var(--color-text-primary);line-height:1.7">${Utils.escapeHtml(scr.remarkCio)}</p></div>` : ''}
-              </div>` : ''}
               ${Approval.renderForSCR(scr.id)}
             </div>
           </div>` : `
@@ -727,7 +833,7 @@ const SCRManager = {
       <div class="page-header">
         <div class="page-header-left">
           <div class="flex items-center gap-3">
-            <button class="btn btn-ghost btn-sm" onclick="Router.navigate('scr-list')">← Back</button>
+            <button class="btn btn-ghost btn-sm" onclick="Router.goBack()" title="Go back">← Back</button>
             <h2 class="page-title">${isEdit ? `Edit ${scr.scrNumber}` : 'New SCR Request'}</h2>
           </div>
           <p class="page-description">${isEdit ? 'Update SCR details' : 'Submit a new software change request'}</p>
@@ -744,16 +850,24 @@ const SCRManager = {
             <span class="scr-section-badge">SOFTWARE CHANGE REQUEST (SCR) FORM</span>
           </div>
           <div class="scr-form-section-body">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">SCR Number</label>
-                <input type="text" class="form-input" value="${isEdit ? Utils.escapeHtml(scr.scrNumber) : 'Auto-generated on submit'}" readonly style="opacity:0.7">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Date</label>
+            ${isRequester ? `
+              <!-- Requester view: only Date shown. SCR Number is auto-assigned at save. -->
+              <div class="form-group" style="max-width:320px">
+                <label class="form-label">Request Date</label>
                 <input type="text" class="form-input" value="${Utils.formatDate(isEdit ? scr.scrDate : Utils.today())}" readonly style="opacity:0.7">
               </div>
-            </div>
+            ` : `
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">SCR Number</label>
+                  <input type="text" class="form-input" value="${isEdit ? Utils.escapeHtml(scr.scrNumber) : 'Auto-generated on submit'}" readonly style="opacity:0.7">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Date</label>
+                  <input type="text" class="form-input" value="${Utils.formatDate(isEdit ? scr.scrDate : Utils.today())}" readonly style="opacity:0.7">
+                </div>
+              </div>
+            `}
           </div>
         </div>
 
@@ -820,6 +934,7 @@ const SCRManager = {
           </div>
         </div>
 
+        ${isRequester ? '' : `
         <!-- ━━━━━━ SECTION 5: ATTACHMENTS ━━━━━━ -->
         <div class="scr-form-section">
           <div class="scr-form-section-title">
@@ -834,6 +949,7 @@ const SCRManager = {
             <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="SCRManager.addAttachmentSlot()">+ Add Attachment</button>
           </div>
         </div>
+        `}
 
         <!-- ━━━━━━ SECTION 6: END USER DETAILS ━━━━━━ -->
         <div class="scr-form-section">
@@ -845,17 +961,7 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Requested By <span class="required">*</span></label>
-                <input type="text" class="form-input" id="scr-requested-by" value="${Utils.escapeHtml(defaultRequestedBy)}" placeholder="Full name of requester" required>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Received By</label>
-                <input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Coordinated By</label>
-                <input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">
+                <input type="text" class="form-input" id="scr-requested-by" value="${Utils.escapeHtml(defaultRequestedBy)}" placeholder="Full name of requester" ${isRequester ? 'readonly' : ''} required>
               </div>
               <div class="form-group">
                 <label class="form-label">Department Name <span class="required">*</span></label>
@@ -865,6 +971,22 @@ const SCRManager = {
                 </select>
               </div>
             </div>
+            ${isRequester ? `
+              <!-- Received By / Coordinated By are IT-internal fields; filled during review -->
+              <input type="hidden" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}">
+              <input type="hidden" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}">
+            ` : `
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Received By</label>
+                  <input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Coordinated By</label>
+                  <input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">
+                </div>
+              </div>
+            `}
             <div class="form-group" style="max-width:400px">
               <label class="form-label">Department HOD</label>
               <input type="text" class="form-input" id="scr-hod" value="${Utils.escapeHtml(scr.hodName || '')}" readonly placeholder="Auto-filled from department">
@@ -1054,26 +1176,29 @@ const SCRManager = {
         </div>
         ` : ''}
 
-        <!-- ━━━━━━ SECTION 9: REMARKS (Approvers) ━━━━━━ -->
-        ${isApprover ? `
+        <!-- ━━━━━━ SECTION 9: REVIEW REMARKS (Project Head + Approvers) ━━━━━━ -->
+        ${isApprover || isPH ? `
         <div class="scr-form-section scr-section-approval">
           <div class="scr-form-section-title">
             <span class="scr-section-num approval">9</span>
-            <span>Remarks</span>
-            <span class="scr-section-role-badge approval">Approvers Only</span>
+            <span>Review Remarks</span>
+            <span class="scr-section-role-badge approval">Project Head, AGM-IT, CIO</span>
           </div>
           <div class="scr-form-section-body">
             <div class="form-group">
-              <label class="form-label">Project Head Remarks</label>
-              <textarea class="form-textarea" id="scr-remark-ph" rows="2" placeholder="Project Head remarks..." ${!Auth.hasRole('project_head','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkProjectHead || '')}</textarea>
+              <label class="form-label">Project Head Remarks ${isPH ? '<span class="required">*</span>' : ''}</label>
+              <textarea class="form-textarea" id="scr-remark-ph" rows="3" placeholder="Review findings, recommendations, developer assignment rationale..." ${!Auth.hasRole('project_head','admin') ? 'readonly style="opacity:0.7"' : ''}>${Utils.escapeHtml(scr.remarkProjectHead || '')}</textarea>
+              ${!Auth.hasRole('project_head','admin') ? '<span class="form-hint">Read-only — only the Project Head can edit this field</span>' : '<span class="form-hint">Write your review remarks before advancing to Management Approval</span>'}
             </div>
             <div class="form-group">
               <label class="form-label">AGM – IT Remarks</label>
-              <textarea class="form-textarea" id="scr-remark-agm" rows="2" placeholder="AGM IT remarks..." ${!Auth.hasRole('agm_it','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkAgmIt || '')}</textarea>
+              <textarea class="form-textarea" id="scr-remark-agm" rows="3" placeholder="AGM-IT approval comments..." ${!Auth.hasRole('agm_it','admin') ? 'readonly style="opacity:0.7"' : ''}>${Utils.escapeHtml(scr.remarkAgmIt || '')}</textarea>
+              ${!Auth.hasRole('agm_it','admin') ? '<span class="form-hint">Read-only — only AGM-IT can edit this field</span>' : ''}
             </div>
             <div class="form-group">
               <label class="form-label">CIO Remarks</label>
-              <textarea class="form-textarea" id="scr-remark-cio" rows="2" placeholder="CIO remarks..." ${!Auth.hasRole('cio','admin') ? 'readonly style="opacity:0.6"' : ''}>${Utils.escapeHtml(scr.remarkCio || '')}</textarea>
+              <textarea class="form-textarea" id="scr-remark-cio" rows="3" placeholder="CIO approval comments..." ${!Auth.hasRole('cio','admin') ? 'readonly style="opacity:0.7"' : ''}>${Utils.escapeHtml(scr.remarkCio || '')}</textarea>
+              ${!Auth.hasRole('cio','admin') ? '<span class="form-hint">Read-only — only the CIO can edit this field</span>' : ''}
             </div>
           </div>
         </div>
@@ -1138,8 +1263,10 @@ const SCRManager = {
     document.getElementById(`att-slot-${i}`)?.remove();
   },
 
-  _collectAttachments() {
+  _collectAttachments(fallbackAttachments) {
     const slots = document.querySelectorAll('.att-name');
+    // If section isn't rendered (e.g. hidden for requesters), preserve what was there
+    if (slots.length === 0 && Array.isArray(fallbackAttachments)) return fallbackAttachments;
     const result = [];
     slots.forEach(s => { if (s.value.trim()) result.push({ name: s.value.trim(), url: '' }); });
     return result;
@@ -1189,18 +1316,21 @@ const SCRManager = {
     const getVal = (id) => document.getElementById(id)?.value || '';
     const getRadio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
 
+    // Preserve existing attachments if section was hidden for this role
+    const existing = editId ? (Store.getById('scr_requests', editId) || {}) : {};
+
     const data = {
-      // Section 2
-      requestType: getVal('scr-type'),
-      intervention: getVal('scr-intervention'),
-      priority: getVal('scr-intervention'),
+      // Section 2 — defaults applied when hidden for requester
+      requestType: getVal('scr-type') || 'New',
+      intervention: getVal('scr-intervention') || 'Routine',
+      priority: getVal('scr-intervention') || 'Routine',
       // Section 3
       moduleName: getVal('scr-module'),
       description: getVal('scr-desc'),
       // Section 4
       reasonForChange: getVal('scr-reason'),
-      // Section 5
-      attachments: this._collectAttachments(),
+      // Section 5 — fall back to existing attachments when section is hidden
+      attachments: this._collectAttachments(existing.attachments),
       // Section 6
       requestedBy: getVal('scr-requested-by'),
       receivedBy: getVal('scr-received-by'),

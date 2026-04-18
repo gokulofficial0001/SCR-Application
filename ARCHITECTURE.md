@@ -30,6 +30,7 @@ SCR FILES/
     ├── dashboard.js           → Dashboard page (KPIs, charts)
     ├── scr-manager.js         → SCR list + detail + form + print
     ├── dev-updates.js         → Developer progress journal (stage 5+)
+    ├── reports.js             → Audit reports (weekly/monthly/yearly + CSV)
     ├── approval.js            → Stage 4 AGM+CIO dual approval
     ├── feedback.js            → Feedback modal + ratings + page
     ├── self-service.js        → Requester portal
@@ -125,6 +126,15 @@ SCR FILES/
 - `renderForSCR(scrId, scr)` — timeline strip (Assigned / Schedule / Completed) + progress bar + list of updates + "Add Update" button
 - `showForm(scrId)` — modal with title/description/status/percent fields
 - `handleSubmit(scrId)`, `handleDelete(updateId, scrId)`
+
+**reports.js** — Audit reports (weekly / monthly / yearly / custom)
+- `period` state — 'week' / 'month' / 'year' / 'custom' with `customFrom`/`customTo`
+- `getRange()` — computes {from, to} for the current period
+- `render()` — full report page: KPIs, dept breakdown, priority/stage splits, approval stats, feedback summary, rejection analysis, SCR audit log, audit activity
+- `setPeriod(p)`, `setCustomRange()` — period switching
+- `downloadCSV()` — exports all in-range SCRs as CSV with UTF-8 BOM (Excel-ready)
+- Print-friendly via `@media print` inline styles — hides selector/buttons
+- Gated via `Auth.canAccessPage('reports')` — currently admin only; adjust in `auth.js` permission matrix or Master Data → Roles
 
 **approval.js** — Stage 4 dual approval
 - `approvalChain = ['agm_it', 'cio']` — both must approve to advance to stage 5
@@ -420,7 +430,7 @@ If other devices can't connect: open port 3500 in Windows Firewall (one-time adm
 
 | Role | Pages | Actions |
 |---|---|---|
-| **admin** | All | All |
+| **admin** | All (incl. Reports) | All (incl. view_reports) |
 | **cio** | Dashboard, SCR list, SCR detail, Approvals, Feedback, Audit, Notifications | Approve, Reject (stage 4), View audit |
 | **agm_it** | Same as CIO | Same as CIO |
 | **project_head** | Dashboard, SCR list, SCR detail, SCR create, Feedback, Audit, Notifications | Create SCR, Edit, Assign, Advance, Reject (stage 3), View audit |

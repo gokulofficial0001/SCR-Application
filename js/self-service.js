@@ -115,7 +115,7 @@ const SelfService = {
         <div class="card-body" style="padding-top:0">
           <form onsubmit="SelfService.handleQuickSubmit(event)">
 
-            <!-- Section 1: Header (auto) -->
+            <!-- Section 1: Header (Date only — SCR number auto-assigned at submit) -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
                 <span class="scr-section-num">1</span>
@@ -123,20 +123,14 @@ const SelfService = {
                 <span class="scr-section-badge">SOFTWARE CHANGE REQUEST (SCR) FORM</span>
               </div>
               <div class="scr-form-section-body">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">SCR Number</label>
-                    <input type="text" class="form-input" value="Auto-generated on submit" readonly style="opacity:0.6">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Date</label>
-                    <input type="text" class="form-input" value="${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}" readonly style="opacity:0.6">
-                  </div>
+                <div class="form-group" style="max-width:320px">
+                  <label class="form-label">Request Date</label>
+                  <input type="text" class="form-input" value="${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}" readonly style="opacity:0.6">
                 </div>
               </div>
             </div>
 
-            <!-- Section 2: Project Details -->
+            <!-- Section 2: Project Details (Request Type + Intervention filled by requester) -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
                 <span class="scr-section-num">2</span>
@@ -170,7 +164,7 @@ const SelfService = {
             <!-- Section 3: Request Description -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">3</span>
+                <span class="scr-section-num">2</span>
                 <span>Request Description</span>
               </div>
               <div class="scr-form-section-body">
@@ -185,10 +179,10 @@ const SelfService = {
               </div>
             </div>
 
-            <!-- Section 4: Reason for Change -->
+            <!-- Section 3: Reason for Change -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">4</span>
+                <span class="scr-section-num">3</span>
                 <span>Reason for Change</span>
               </div>
               <div class="scr-form-section-body">
@@ -199,45 +193,21 @@ const SelfService = {
               </div>
             </div>
 
-            <!-- Section 5: Attachments -->
-            <div class="scr-form-section">
-              <div class="scr-form-section-title">
-                <span class="scr-section-num">5</span>
-                <span>Attachments</span>
-                <span class="scr-section-hint">Up to 6 files</span>
-              </div>
-              <div class="scr-form-section-body">
-                <div id="quick-attachments">
-                  <div class="attachment-slot" id="quick-att-0">
-                    <span class="att-slot-num">1.</span>
-                    <input type="text" class="form-input att-name-q" placeholder="Attachment description / filename" style="flex:1">
-                  </div>
-                </div>
-                <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="SelfService.addAttachment()">+ Add Attachment</button>
-              </div>
-            </div>
+            <!-- Received By / Coordinated By / Attachments are IT-internal — hidden for requester -->
+            <input type="hidden" id="quick-received-by" value="">
+            <input type="hidden" id="quick-coordinated-by" value="">
 
-            <!-- Section 6: End User Details -->
+            <!-- Section 4: End User Details -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">6</span>
+                <span class="scr-section-num">4</span>
                 <span>End User Details</span>
               </div>
               <div class="scr-form-section-body">
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label">Requested By <span class="required">*</span></label>
-                    <input type="text" class="form-input" id="quick-requested-by" value="${Utils.escapeHtml(user.name)}" required>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Received By</label>
-                    <input type="text" class="form-input" id="quick-received-by" placeholder="IT staff receiving this request">
-                  </div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Coordinated By</label>
-                    <input type="text" class="form-input" id="quick-coordinated-by" placeholder="IT coordinator name">
+                    <input type="text" class="form-input" id="quick-requested-by" value="${Utils.escapeHtml(user.name)}" readonly required style="opacity:0.85">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Department Name <span class="required">*</span></label>
@@ -275,22 +245,6 @@ const SelfService = {
     document.getElementById('quick-module')?.focus();
   },
 
-  addAttachment() {
-    const container = document.getElementById('quick-attachments');
-    if (!container) return;
-    const count = container.querySelectorAll('.attachment-slot').length;
-    if (count >= 6) { Utils.toast('warning', 'Max Attachments', 'You can attach up to 6 files'); return; }
-    const slot = document.createElement('div');
-    slot.className = 'attachment-slot';
-    slot.id = `quick-att-${count}`;
-    slot.innerHTML = `
-      <span class="att-slot-num">${count + 1}.</span>
-      <input type="text" class="form-input att-name-q" placeholder="Attachment description / filename" style="flex:1">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()" style="color:var(--color-danger);padding:0 var(--space-2)">✕</button>
-    `;
-    container.appendChild(slot);
-  },
-
   onQuickDeptChange() {
     const deptName = document.getElementById('quick-dept')?.value;
     const hodField = document.getElementById('quick-hod');
@@ -304,23 +258,16 @@ const SelfService = {
     e.preventDefault();
     const getVal = (id) => (document.getElementById(id)?.value || '').trim();
 
-    // Collect attachments — sanitize names to prevent XSS via filename later
-    const attInputs = document.querySelectorAll('.att-name-q');
-    const attachments = [];
-    attInputs.forEach(inp => {
-      const name = inp.value.trim().slice(0, 200); // cap length
-      if (name) attachments.push({ name, url: '' });
-    });
-
-    const intervention = getVal('quick-intervention');
+    // Requesters can't attach files — IT will add any internal docs during review
+    const intervention = getVal('quick-intervention') || 'Routine';
     const data = {
-      requestType: getVal('quick-type'),
+      requestType: getVal('quick-type') || 'New',
       intervention,
       priority: intervention,
       moduleName: getVal('quick-module'),
       description: getVal('quick-desc'),
       reasonForChange: getVal('quick-reason'),
-      attachments,
+      attachments: [],
       requestedBy: getVal('quick-requested-by'),
       receivedBy: getVal('quick-received-by'),
       coordinatedBy: getVal('quick-coordinated-by'),
@@ -397,7 +344,6 @@ const SelfService = {
     }
 
     const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
-    const sla = SLAEngine.calculate(scr);
 
     resultDiv.innerHTML = `
       <div class="track-result">

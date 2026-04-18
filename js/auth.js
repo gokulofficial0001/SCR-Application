@@ -6,8 +6,8 @@ const Auth = {
   // ── Permission Matrix ───────────────────────────────────
   permissions: {
     admin: {
-      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'approvals', 'feedback', 'audit', 'master-data', 'notifications', 'settings'],
-      actions: ['create_scr', 'edit_scr', 'delete_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'close_ticket', 'manage_users', 'manage_departments', 'view_audit', 'reset_data']
+      pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'approvals', 'feedback', 'audit', 'reports', 'master-data', 'notifications', 'settings'],
+      actions: ['create_scr', 'edit_scr', 'delete_scr', 'assign_scr', 'advance_stage', 'approve', 'reject', 'hold', 'close_ticket', 'manage_users', 'manage_departments', 'view_audit', 'view_reports', 'reset_data']
     },
     cio: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'approvals', 'feedback', 'audit', 'notifications'],

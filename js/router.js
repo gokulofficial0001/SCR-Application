@@ -6,8 +6,13 @@ const Router = {
   currentPage: null,
   params: {},
 
+  // ── Navigation history stack (for "← Back" buttons) ─────
+  history: [],
+  _maxHistory: 30,
+
   // ── Navigate to a page ──────────────────────────────────
-  navigate(page, params = {}) {
+  // skipHistory: true when called from goBack() so we don't re-record
+  navigate(page, params = {}, skipHistory = false) {
     // Auth guard
     if (page !== 'login' && !Auth.isLoggedIn()) {
       App.init();
@@ -23,6 +28,12 @@ const Router = {
         this.navigate(defaultPage);
         return;
       }
+    }
+
+    // Record previous page so "← Back" knows where to go
+    if (!skipHistory && this.currentPage && this.currentPage !== page) {
+      this.history.push({ page: this.currentPage, params: { ...this.params } });
+      if (this.history.length > this._maxHistory) this.history.shift();
     }
 
     this.currentPage = page;
@@ -42,6 +53,7 @@ const Router = {
       'approvals': 'Approvals',
       'feedback': 'Feedback',
       'audit': 'Audit Trail',
+      'reports': 'Audit Reports',
       'master-data': 'Master Data',
       'notifications': 'Notifications',
       'settings': 'Settings',
@@ -93,6 +105,9 @@ const Router = {
         case 'audit':
           html = Audit.renderLog();
           break;
+        case 'reports':
+          html = Reports.render();
+          break;
         case 'master-data':
           html = MasterData.render();
           break;
@@ -141,7 +156,10 @@ const Router = {
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Settings</h2>
+          <div class="flex items-center gap-3">
+            ${this.renderBackButton()}
+            <h2 class="page-title">Settings</h2>
+          </div>
           <p class="page-description">System configuration and preferences</p>
         </div>
       </div>
@@ -188,6 +206,30 @@ const Router = {
         </div>
       </div>
     `;
+  },
+
+  // ── Back button helpers ─────────────────────────────────
+  canGoBack() {
+    return this.history.length > 0;
+  },
+
+  goBack() {
+    const prev = this.history.pop();
+    if (prev) {
+      this.navigate(prev.page, prev.params, true);
+    } else {
+      // No history — fall back to user's default home
+      this.navigate(Auth.getDefaultPage(), {}, true);
+    }
+  },
+
+  // Reusable back button — call from any page header
+  // Returns empty string if there's nothing to go back to (so the
+  // user's default home page doesn't show a pointless button).
+  renderBackButton(size = 'sm') {
+    if (!this.canGoBack()) return '';
+    const cls = size === 'sm' ? 'btn btn-ghost btn-sm' : 'btn btn-ghost';
+    return `<button class="${cls}" onclick="Router.goBack()" aria-label="Go back" title="Go back to previous page">← Back</button>`;
   },
 
   async handleReset() {

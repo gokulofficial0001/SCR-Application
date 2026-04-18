@@ -34,7 +34,10 @@ const Audit = {
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Audit Trail</h2>
+          <div class="flex items-center gap-3">
+            ${Router.renderBackButton()}
+            <h2 class="page-title">Audit Trail</h2>
+          </div>
           <p class="page-description">Complete system activity log for NABH compliance</p>
         </div>
         <div style="display:flex;gap:var(--space-3)">

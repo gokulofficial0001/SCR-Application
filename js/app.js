@@ -107,6 +107,12 @@ const App = {
                   <span class="nav-label">Audit Trail</span>
                 </div>
               ` : ''}
+              ${Auth.canAccessPage('reports') ? `
+                <div class="nav-item" data-page="reports" onclick="Router.navigate('reports')">
+                  <span class="nav-icon">📊</span>
+                  <span class="nav-label">Reports</span>
+                </div>
+              ` : ''}
             </div>
           ` : ''}
 

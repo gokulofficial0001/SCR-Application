@@ -12,7 +12,10 @@ const MasterData = {
     return `
       <div class="page-header">
         <div class="page-header-left">
-          <h2 class="page-title">Master Data</h2>
+          <div class="flex items-center gap-3">
+            ${Router.renderBackButton()}
+            <h2 class="page-title">Master Data</h2>
+          </div>
           <p class="page-description">Manage departments, staff, and system configuration</p>
         </div>
       </div>
