@@ -33,20 +33,14 @@ const App = {
     // Render full app shell (sidebar + header + everything)
     this.renderShell();
 
-    // New SCR tab flow — requester clicked "New Request" on Home.
-    // Navigate to the full scr-create screen and set a flag so the
-    // submit handler knows to show the success modal + redirect to Home
-    // instead of going to SCR detail.
-    const action = urlParams.get('action');
-    if (action === 'new-scr') {
-      sessionStorage.setItem('scr-new-tab-flow', '1');
-      Router.navigate('scr-create');
-      window.history.replaceState({}, '', window.location.pathname);
-    } else {
-      // Normal flow — navigate to the user's default page
-      const defaultPage = Auth.getDefaultPage();
-      Router.navigate(defaultPage);
-    }
+    // Normal flow — clear any stale same-tab submission flag so it
+    // can't incorrectly trigger the success modal on an unrelated SCR.
+    // The flag is now set by SelfService.openInNewWindow at click time.
+    sessionStorage.removeItem('scr-new-tab-flow');
+
+    // Normal flow — navigate to the user's default page
+    const defaultPage = Auth.getDefaultPage();
+    Router.navigate(defaultPage);
 
     // Update notification badge
     Notifications.updateBadge();

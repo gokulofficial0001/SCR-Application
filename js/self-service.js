@@ -96,19 +96,16 @@ const SelfService = {
     `;
   },
 
-  // ── Open an action in a new TAB ──────────────────────────
-  // "New Request"  → opens full SCR Request screen (sidebar + all) via ?action=new-scr
-  // Track / Feedback → still use the minimal-shell view (no sidebar needed)
+  // ── Open an action — all in the SAME tab (no new tabs spawned) ──
+  // "New Request"  → navigate to full SCR Request screen in-place
+  // Track / Feedback → reveal their inline panel on the Home page
   openInNewWindow(action) {
-    const base = window.location.pathname.replace(/[^/]*$/, '');
-    const url = action === 'create-scr'
-      ? `${base}?action=new-scr`
-      : `${base}?minimal=${encodeURIComponent(action)}`;
-    // No size features → browser opens as a tab (not a popup window)
-    const tab = window.open(url, '_blank');
-    if (!tab) {
-      Utils.toast('warning', 'New Tab Blocked',
-        'Allow popups for this site to open a new tab. Opening inline instead.');
+    if (action === 'create-scr') {
+      // Flag this as a Home-initiated submission so handleSubmit shows
+      // the success modal + redirects to Home instead of scr-detail
+      sessionStorage.setItem('scr-new-tab-flow', '1');
+      Router.navigate('scr-create');
+    } else {
       this._runAction(action);
     }
   },

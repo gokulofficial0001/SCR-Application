@@ -306,7 +306,7 @@ const SCRManager = {
                     <td class="text-sm">${Utils.escapeHtml(scr.department)}</td>
                     <td class="text-sm" style="max-width:250px">${Utils.escapeHtml(Utils.truncate(scr.description, 60))}</td>
                     <td><span class="text-xs text-tertiary">${Utils.getStageName(scr.currentStage)}</span></td>
-                    <td>${Utils.statusBadge(scr.status)} ${rej ? `<span data-tooltip="${Utils.escapeHtml(rejTooltip)}" style="margin-left:4px;cursor:help" aria-label="Rejection remarks">⚠️</span>` : ''}</td>
+                    <td>${Utils.statusBadge(scr.status)} ${rej ? `<span title="${Utils.escapeHtml(rejTooltip)}" style="margin-left:4px;cursor:help" aria-label="Rejection remarks">⚠️</span>` : ''}</td>
                     <td>${SLAEngine.renderIndicator(scr)}</td>
                     <td class="text-sm text-tertiary">${Utils.formatDate(scr.createdAt)}</td>
                   </tr>

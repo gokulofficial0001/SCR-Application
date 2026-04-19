@@ -213,9 +213,9 @@ const Workflow = {
       }
 
       html += `
-        <div class="pipeline-stage ${stateClass}" data-tooltip="${stage.name}">
+        <div class="pipeline-stage ${stateClass}" title="${Utils.escapeHtml(stage.name)}">
           <span class="stage-dot"></span>
-          <span>${stage.short}</span>
+          <span>${Utils.escapeHtml(stage.short)}</span>
         </div>
       `;
 
