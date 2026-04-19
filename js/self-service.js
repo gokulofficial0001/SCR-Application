@@ -513,8 +513,9 @@ const SelfService = {
       <div class="track-result">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="track-scr-number">${scr.scrNumber}</div>
-            <p class="text-secondary">${Utils.escapeHtml(scr.department)}</p>
+            <div class="track-scr-number">${Utils.escapeHtml(scr.scrNumber)}</div>
+            <p class="font-semi" style="color:var(--color-text-primary);margin:2px 0 0">${Utils.escapeHtml(scr.moduleName || '—')}</p>
+            <p class="text-sm text-tertiary" style="margin:2px 0 0">${Utils.escapeHtml(scr.department || '—')}</p>
           </div>
           <div class="text-right">
             ${Utils.priorityBadge(scr.priority)}
@@ -527,16 +528,28 @@ const SelfService = {
 
         <div class="detail-grid mt-4">
           <div class="detail-field">
+            <span class="detail-label">Module Name</span>
+            <span class="detail-value font-semi">${Utils.escapeHtml(scr.moduleName || '—')}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">Request Type</span>
+            <span class="detail-value">${Utils.escapeHtml(scr.requestType || '—')}</span>
+          </div>
+          <div class="detail-field" style="grid-column:span 2">
             <span class="detail-label">Description</span>
-            <span class="detail-value">${Utils.escapeHtml(scr.description)}</span>
+            <span class="detail-value">${Utils.escapeHtml(scr.description || '—')}</span>
           </div>
           <div class="detail-field">
             <span class="detail-label">Current Stage</span>
-            <span class="detail-value">${Utils.getStageName(scr.currentStage)}</span>
+            <span class="detail-value">${Utils.escapeHtml(Utils.getStageName(scr.currentStage))}</span>
           </div>
           <div class="detail-field">
             <span class="detail-label">Developer</span>
             <span class="detail-value">${dev ? Utils.escapeHtml(dev.name) : 'Not yet assigned'}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">Department</span>
+            <span class="detail-value">${Utils.escapeHtml(scr.department || '—')}</span>
           </div>
           <div class="detail-field">
             <span class="detail-label">Created</span>
