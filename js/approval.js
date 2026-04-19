@@ -77,7 +77,7 @@ const Approval = {
       const toStage = 2;
 
       const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
-      currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Rejected', notes: comments.trim() }));
+      currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Rejected', notes: comments.trim() }));
 
       Store.add('workflow_stages', {
         scrId, stage: toStage,
@@ -115,7 +115,7 @@ const Approval = {
         const toStage = 5;
 
         const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
-        currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Approved' }));
+        currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Approved' }));
 
         Store.add('workflow_stages', {
           scrId, stage: toStage,

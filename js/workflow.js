@@ -91,7 +91,7 @@ const Workflow = {
     const user = Auth.currentUser();
 
     const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 6 && !w.exitedAt);
-    currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Closed' }));
+    currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Closed' }));
 
     Store.update('scr_requests', scrId, { status: 'Closed', completedOn: Utils.today() });
 
@@ -133,7 +133,7 @@ const Workflow = {
     if (targetStage === null || targetStage === undefined) {
       // Terminal rejection (stage 2)
       const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
-      currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), action: 'Rejected', notes: remarks }));
+      currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Rejected', notes: remarks }));
 
       Store.update('scr_requests', scrId, {
         status: 'Rejected',
@@ -170,6 +170,7 @@ const Workflow = {
     const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
     currentWf.forEach(w => Store.update('workflow_stages', w.id, {
       exitedAt: Utils.nowISO(),
+      exitedBy: user.id,  // who advanced/rejected this stage
       action: isRejection ? 'Rejected' : 'Completed'
     }));
 
@@ -239,9 +240,16 @@ const Workflow = {
       <div class="timeline">
         ${entries.map(entry => {
           const stage = Utils.stages.find(s => s.id === entry.stage);
-          const user = Store.getById('users', entry.performedBy);
+          const enterUser = Store.getById('users', entry.performedBy);
+          const exitUser = entry.exitedBy ? Store.getById('users', entry.exitedBy) : null;
           const isCompleted = !!entry.exitedAt;
           const isRejected = entry.action === 'Rejected' || entry.action === 'Returned';
+
+          // For completed/rejected stages, show who ACTED on it (exited).
+          // Fall back to enterUser for legacy records that lack exitedBy.
+          // For active stages, show who entered / is handling it.
+          const displayUser = isCompleted ? (exitUser || enterUser) : enterUser;
+          const displayName = displayUser ? Utils.escapeHtml(displayUser.name) : null;
 
           return `
             <div class="timeline-item">
@@ -251,7 +259,7 @@ const Workflow = {
                   ${isRejected ? '<span class="badge badge-danger" style="font-size:10px;margin-left:4px">Returned</span>' : ''}
                 </div>
                 <div class="timeline-text">
-                  ${Utils.escapeHtml(entry.action || '')} ${user ? `by ${Utils.escapeHtml(user.name)}` : '<span class="text-muted">(user unavailable)</span>'}
+                  ${Utils.escapeHtml(entry.action || '')} ${displayName ? `by ${displayName}` : '<span class="text-muted">(user unavailable)</span>'}
                   <br>Entered: ${Utils.formatDateTime(entry.enteredAt)}
                   ${entry.exitedAt ? `<br>Exited: ${Utils.formatDateTime(entry.exitedAt)}` : ' — In Progress'}
                   ${entry.notes ? `<br><em style="color:var(--color-text-tertiary)">${Utils.escapeHtml(entry.notes)}</em>` : ''}
