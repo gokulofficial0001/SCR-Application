@@ -81,8 +81,12 @@ const DevUpdates = {
     // Only show section for SCRs that have reached Development stage
     if (!scr || scr.currentStage < 5) return '';
 
-    const updates = this.getForSCR(scrId);
     const user = Auth.currentUser();
+    // Requesters don't see internal development progress — it's
+    // implementation-side detail. Their view shows only status + pipeline.
+    if (user && user.role === 'requester') return '';
+
+    const updates = this.getForSCR(scrId);
     const isAssignedDev = user && (scr.assignedDeveloper === user.id || scr.assignedDeveloper2 === user.id);
     const canPost = (isAssignedDev || (user && user.role === 'admin')) &&
                     scr.status !== 'Closed' && scr.status !== 'Rejected';

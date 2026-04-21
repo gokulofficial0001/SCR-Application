@@ -507,7 +507,9 @@ const SelfService = {
       return;
     }
 
-    const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
+    // Requester view — status-only. No developer / schedules / dev updates /
+    // "View Full Details" link. Just the tracking info they need.
+    const rej = scr.lastRejection;
 
     resultDiv.innerHTML = `
       <div class="track-result">
@@ -524,41 +526,30 @@ const SelfService = {
         </div>
 
         ${Workflow.renderPipeline(scr)}
-        ${SLAEngine.renderProgressBar(scr)}
+
+        ${rej ? `
+          <div style="margin-top:var(--space-4);padding:var(--space-3) var(--space-4);background:rgba(184,52,30,0.06);border-left:3px solid var(--color-danger);border-radius:var(--radius-md)">
+            <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
+              <span style="font-size:1.1rem">⚠️</span>
+              <span class="font-bold text-sm" style="color:var(--color-danger-dark)">Returned — ${Utils.escapeHtml(rej.fromStageName || '')}</span>
+            </div>
+            <p class="text-sm" style="color:var(--color-text-primary);line-height:1.6;margin:0;white-space:pre-wrap">"${Utils.escapeHtml(rej.remarks || '')}"</p>
+          </div>
+        ` : ''}
 
         <div class="detail-grid mt-4">
           <div class="detail-field">
-            <span class="detail-label">Module Name</span>
-            <span class="detail-value font-semi">${Utils.escapeHtml(scr.moduleName || '—')}</span>
+            <span class="detail-label">Current Stage</span>
+            <span class="detail-value font-semi">${Utils.escapeHtml(Utils.getStageName(scr.currentStage))}</span>
           </div>
           <div class="detail-field">
-            <span class="detail-label">Request Type</span>
-            <span class="detail-value">${Utils.escapeHtml(scr.requestType || '—')}</span>
+            <span class="detail-label">Submitted On</span>
+            <span class="detail-value">${Utils.formatDate(scr.createdAt)}</span>
           </div>
           <div class="detail-field" style="grid-column:span 2">
             <span class="detail-label">Description</span>
             <span class="detail-value">${Utils.escapeHtml(scr.description || '—')}</span>
           </div>
-          <div class="detail-field">
-            <span class="detail-label">Current Stage</span>
-            <span class="detail-value">${Utils.escapeHtml(Utils.getStageName(scr.currentStage))}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-label">Developer</span>
-            <span class="detail-value">${dev ? Utils.escapeHtml(dev.name) : 'Not yet assigned'}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-label">Department</span>
-            <span class="detail-value">${Utils.escapeHtml(scr.department || '—')}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-label">Created</span>
-            <span class="detail-value">${Utils.formatDate(scr.createdAt)}</span>
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-4">
-          <button class="btn btn-primary btn-sm" onclick="Router.navigate('scr-detail',{id:'${scr.id}'})">View Full Details →</button>
         </div>
       </div>
     `;

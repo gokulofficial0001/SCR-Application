@@ -523,8 +523,8 @@ const SCRManager = {
             </div>
           </div>
 
-          <!-- SECTION 7: Study Details -->
-          ${isImpl || scr.studyDoneByPrimary ? `
+          <!-- SECTION 7: Study Details — hidden for requesters (internal IT detail) -->
+          ${(isImpl || scr.studyDoneByPrimary) && currentUser.role !== 'requester' ? `
           <div class="card">
             <div class="card-header">
               <h3 class="card-title">🔬 Study Details</h3>
