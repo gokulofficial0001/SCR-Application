@@ -96,6 +96,10 @@ const App = {
   // ── Render Login ────────────────────────────────────────
   renderLogin() {
     document.getElementById('app').innerHTML = Auth.renderLoginPage();
+    // Kick off animations: greeting, tagline rotation, stat counters, parallax
+    if (typeof Auth.postRenderLogin === 'function') {
+      setTimeout(() => Auth.postRenderLogin(), 60);
+    }
   },
 
   // ── Render App Shell ────────────────────────────────────

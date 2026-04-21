@@ -155,11 +155,25 @@ const Auth = {
       <div class="login-split">
 
         <!-- ═══ LEFT VISUAL PANEL ═══ -->
-        <div class="login-visual">
-          <!-- Gradient mesh orbs -->
-          <div class="lv-mesh lv-mesh-1"></div>
-          <div class="lv-mesh lv-mesh-2"></div>
-          <div class="lv-mesh lv-mesh-3"></div>
+        <div class="login-visual" id="login-visual">
+          <!-- Gradient mesh orbs (mouse-parallax reactive) -->
+          <div class="lv-mesh lv-mesh-1" data-parallax="0.04"></div>
+          <div class="lv-mesh lv-mesh-2" data-parallax="0.07"></div>
+          <div class="lv-mesh lv-mesh-3" data-parallax="0.1"></div>
+
+          <!-- Floating medical-themed particles (rise from bottom) -->
+          <div class="lv-particles" aria-hidden="true">
+            <span class="lv-particle" style="left:8%;animation-delay:0s;animation-duration:18s">♥</span>
+            <span class="lv-particle" style="left:18%;animation-delay:3s;animation-duration:22s">✚</span>
+            <span class="lv-particle" style="left:28%;animation-delay:6s;animation-duration:20s">◆</span>
+            <span class="lv-particle" style="left:40%;animation-delay:1s;animation-duration:24s">♥</span>
+            <span class="lv-particle" style="left:52%;animation-delay:9s;animation-duration:19s">✚</span>
+            <span class="lv-particle" style="left:65%;animation-delay:4s;animation-duration:23s">●</span>
+            <span class="lv-particle" style="left:78%;animation-delay:7s;animation-duration:21s">♥</span>
+            <span class="lv-particle" style="left:88%;animation-delay:2s;animation-duration:25s">✚</span>
+            <span class="lv-particle" style="left:35%;animation-delay:12s;animation-duration:20s">◆</span>
+            <span class="lv-particle" style="left:72%;animation-delay:14s;animation-duration:22s">●</span>
+          </div>
 
           <!-- Network nodes (positions match SVG connection coords) -->
           <div class="lv-nodes">
@@ -224,13 +238,30 @@ const Auth = {
 
           <!-- Branding text -->
           <div class="lv-content">
+            <div class="lv-greeting" id="lv-greeting">Good day</div>
             <div class="lv-tag"><span class="lv-tag-dot"></span>Hospital IT Operations</div>
-            <h1 class="lv-title">Software Change<br>Request System</h1>
-            <p class="lv-sub">Structured workflows. Full traceability.<br>Clinical excellence through technology.</p>
+            <h1 class="lv-title">
+              <span class="word" style="animation-delay:.35s">Software</span>
+              <span class="word" style="animation-delay:.45s">Change</span><br>
+              <span class="word" style="animation-delay:.55s">Request</span>
+              <span class="word" style="animation-delay:.65s">System</span>
+            </h1>
+            <p class="lv-sub" id="lv-sub">Structured workflows. Full traceability.<br>Clinical excellence through technology.</p>
             <div class="lv-chips">
               <span class="lv-chip">6-Stage Workflow</span>
               <span class="lv-chip">Dual Approval</span>
               <span class="lv-chip">Complete Audit Trail</span>
+            </div>
+
+            <!-- GKNM Healthcare IT — rotating updates ticker -->
+            <div class="lv-updates" aria-live="polite">
+              <div class="lv-updates-header">
+                <span class="lv-updates-dot"></span>
+                <span class="lv-updates-label">GKNM Healthcare IT • Live Updates</span>
+              </div>
+              <div class="lv-update-carousel" id="lv-updates-carousel">
+                <!-- Populated by Auth.postRenderLogin -->
+              </div>
             </div>
           </div>
         </div>
@@ -274,6 +305,111 @@ const Auth = {
 
       </div>
     `;
+  },
+
+  // ── Post-render: animate the login page (called by App.renderLogin) ──
+  postRenderLogin() {
+    // 1. Time-based greeting
+    const g = document.getElementById('lv-greeting');
+    if (g) {
+      const h = new Date().getHours();
+      g.textContent = h < 12 ? 'Good morning ☀️' :
+                      h < 17 ? 'Good afternoon 🌤️' :
+                      h < 21 ? 'Good evening 🌆' :
+                               'Good night 🌙';
+    }
+
+    // 2. Rotating tagline — cycle through value propositions every 5s
+    const sub = document.getElementById('lv-sub');
+    if (sub) {
+      const lines = [
+        'Structured workflows. Full traceability.<br>Clinical excellence through technology.',
+        'Every request tracked. Every decision logged.<br>NABH compliance, built in.',
+        'From request to delivery in one audit trail.<br>Speed meets accountability.',
+        'Purpose-built for healthcare IT.<br>Where rigour meets care.'
+      ];
+      let idx = 0;
+      // Clear any existing rotation from a prior render
+      if (this._taglineTimer) clearInterval(this._taglineTimer);
+      this._taglineTimer = setInterval(() => {
+        idx = (idx + 1) % lines.length;
+        sub.style.opacity = '0';
+        setTimeout(() => {
+          sub.innerHTML = lines[idx];
+          sub.style.opacity = '1';
+        }, 300);
+      }, 5000);
+    }
+
+    // 3. GKNM Healthcare IT — rotating updates carousel
+    const carousel = document.getElementById('lv-updates-carousel');
+    if (carousel) {
+      const updates = [
+        { icon: '🩺', title: 'EMR Rollout – Pediatrics',  sub: 'WHO 2025 growth charts going live', tag: 'UPCOMING' },
+        { icon: '🔬', title: 'LIS Barcode Integration',   sub: 'Sample mix-up incidents reduced to zero', tag: 'LIVE' },
+        { icon: '💊', title: 'Pharmacy Expiry Alerts',    sub: 'Auto-notifications 90 days before expiry', tag: 'LIVE' },
+        { icon: '📊', title: 'NABH Audit Trail',          sub: 'Every action logged + timestamped', tag: 'DELIVERED' },
+        { icon: '🏥', title: 'OPD Token System',          sub: 'SMS notifications rolling out this month', tag: 'UPCOMING' },
+        { icon: '🫀', title: 'ICU Real-Time Monitoring',  sub: 'Cardiac dashboard operational 24×7', tag: 'LIVE' },
+        { icon: '🎯', title: 'Triage Module – ER',        sub: 'Color-coded priority + queue analytics', tag: 'DELIVERED' },
+        { icon: '📱', title: 'Mobile Access',             sub: 'All requests trackable from any device', tag: 'LIVE' }
+      ];
+
+      // Render all items, only first is active; rest fade-crossfade in
+      carousel.innerHTML = updates.map((u, i) => `
+        <div class="lv-update-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
+          <span class="lv-update-icon">${u.icon}</span>
+          <div class="lv-update-text">
+            <div class="lv-update-title">${u.title}</div>
+            <div class="lv-update-sub">${u.sub}</div>
+          </div>
+          <span class="lv-update-tag ${u.tag.toLowerCase()}">${u.tag}</span>
+        </div>
+      `).join('');
+
+      // Rotate every 4.5s with crossfade — pauses on hover
+      if (this._updatesTimer) clearInterval(this._updatesTimer);
+      let idx = 0;
+      let paused = false;
+      this._updatesTimer = setInterval(() => {
+        if (paused) return;
+        const items = carousel.querySelectorAll('.lv-update-item');
+        if (!items.length) return;
+        items[idx].classList.remove('active');
+        idx = (idx + 1) % items.length;
+        items[idx].classList.add('active');
+      }, 4500);
+
+      // Pause on hover so users can read — resume on leave
+      const wrapper = carousel.closest('.lv-updates');
+      if (wrapper) {
+        wrapper.addEventListener('mouseenter', () => { paused = true; });
+        wrapper.addEventListener('mouseleave', () => { paused = false; });
+      }
+    }
+
+    // 4. Mouse parallax on mesh orbs
+    const visual = document.getElementById('login-visual');
+    if (visual) {
+      const orbs = visual.querySelectorAll('[data-parallax]');
+      // Unbind any previous handler so we don't stack on re-render
+      if (this._parallaxHandler) {
+        window.removeEventListener('mousemove', this._parallaxHandler);
+      }
+      this._parallaxHandler = (e) => {
+        const rect = visual.getBoundingClientRect();
+        // Normalize cursor to -0.5..0.5 relative to the visual panel
+        const nx = (e.clientX - rect.left) / rect.width  - 0.5;
+        const ny = (e.clientY - rect.top)  / rect.height - 0.5;
+        orbs.forEach(orb => {
+          const depth = parseFloat(orb.dataset.parallax) || 0;
+          const x = nx * depth * 60;
+          const y = ny * depth * 60;
+          orb.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        });
+      };
+      window.addEventListener('mousemove', this._parallaxHandler, { passive: true });
+    }
   },
 
   // ── Handle login form ──────────────────────────────────
