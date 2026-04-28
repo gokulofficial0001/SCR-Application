@@ -74,6 +74,28 @@ const Workflow = {
 
     this._moveToStage(scrId, oldStage, newStage, user, notes || `Advanced by ${user.name}`, 'In Progress');
 
+    // Auto-stamp "Received By" when the implementation team accepts the
+    // request (stage 1 → 2). Only fills if currently empty so a manually
+    // entered name (rare, but possible if impl team created the SCR) is
+    // preserved. This is the moment IT formally takes ownership.
+    if (oldStage === 1 && newStage === 2 && !scr.receivedBy) {
+      Store.update('scr_requests', scrId, { receivedBy: user.name });
+      Audit.log('SCR', scrId, 'Auto-filled', 'receivedBy', null, user.name);
+    }
+
+    // Auto-stamp "Project Head" with the actual reviewer's name when
+    // they advance stage 3 → 4. The form's projectHeadName field gets a
+    // hard-coded default ("Ms. Deepa S") at SCR creation; without this
+    // override, the Management Approval card would always show that
+    // default even if a different PH (e.g. Mr. Panneer Selvan) reviewed.
+    if (oldStage === 3 && newStage === 4 && user.role === 'project_head') {
+      const oldName = scr.projectHeadName || '';
+      if (oldName !== user.name) {
+        Store.update('scr_requests', scrId, { projectHeadName: user.name });
+        Audit.log('SCR', scrId, 'Auto-filled', 'projectHeadName', oldName, user.name);
+      }
+    }
+
     Audit.log('SCR', scrId, 'Stage Advanced', 'currentStage', Utils.getStageName(oldStage), Utils.getStageName(newStage));
 
     const updatedScr = Store.getById('scr_requests', scrId);
@@ -185,6 +207,44 @@ const Workflow = {
     });
 
     Store.update('scr_requests', scrId, { currentStage: toStage, status });
+  },
+
+  // ── Look up the ACTUAL reviewer's current name ───────────
+  // Resolves who really advanced/approved for a role, regardless of
+  // what the SCR's stored *Name field says. Falls back to the stored
+  // value (or sensible default) when no workflow record exists yet.
+  actualReviewerName(scr, role) {
+    if (!scr) return '';
+
+    if (role === 'project_head') {
+      // Stage 3 exitedBy preferred; otherwise stage 4 performedBy
+      const stages = Store.filter('workflow_stages', w => w.scrId === scr.id);
+      const stage3 = stages.find(w => w.stage === 3 && w.exitedAt);
+      const stage4 = stages.find(w => w.stage === 4);
+      const advancerId = (stage3 && stage3.exitedBy) || (stage4 && stage4.performedBy) || null;
+      if (advancerId) {
+        const u = Store.getById('users', advancerId);
+        if (u && u.role === 'project_head') return u.name;
+      }
+      return scr.projectHeadName || 'Ms. Deepa S';
+    }
+
+    if (role === 'agm_it' || role === 'cio') {
+      // Most recent approval by that role
+      const dec = Store.filter('approvals', a => a.scrId === scr.id && a.approverRole === role)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (dec) {
+        // Approval record stored a snapshot — but resolve to LIVE name if user still exists
+        const u = Store.filter('users', x => x.role === role && x.name === dec.approverName)[0];
+        if (u) return u.name;
+        return dec.approverName;
+      }
+      return role === 'agm_it'
+        ? (scr.agmItName || 'Mr. S. Saravanakumar')
+        : (scr.cioName   || 'Mr. Biju Velayudhan');
+    }
+
+    return '';
   },
 
   // ── Stage advance labels (context-sensitive) ─────────────

@@ -592,7 +592,7 @@ const SCRManager = {
                     <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
                       <span style="font-size:1.1rem">👤</span>
                       <span class="font-bold text-sm">Project Head</span>
-                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'project_head'))}</span>
                     </div>
                     <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkProjectHead)}</p>
                   </div>
@@ -602,7 +602,7 @@ const SCRManager = {
                     <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
                       <span style="font-size:1.1rem">📊</span>
                       <span class="font-bold text-sm">AGM – IT</span>
-                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.agmItName || 'Mr. S. Saravanakumar')}</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'agm_it'))}</span>
                     </div>
                     <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkAgmIt)}</p>
                   </div>
@@ -612,7 +612,7 @@ const SCRManager = {
                     <div class="flex items-center" style="gap:var(--space-2);margin-bottom:var(--space-1)">
                       <span style="font-size:1.1rem">🏛️</span>
                       <span class="font-bold text-sm">CIO</span>
-                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}</span>
+                      <span class="text-xs text-tertiary">— ${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'cio'))}</span>
                     </div>
                     <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;white-space:pre-wrap;margin:0">${Utils.escapeHtml(scr.remarkCio)}</p>
                   </div>
@@ -639,15 +639,15 @@ const SCRManager = {
               <div class="detail-grid">
                 <div class="detail-field">
                   <span class="detail-label">Project Head</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'project_head'))}</span>
                 </div>
                 <div class="detail-field">
                   <span class="detail-label">AGM – IT</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.agmItName || 'Mr. S. Saravanakumar')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'agm_it'))}</span>
                 </div>
                 <div class="detail-field" style="grid-column:span 2">
                   <span class="detail-label">CIO</span>
-                  <span class="detail-value">${Utils.escapeHtml(scr.cioName || 'Mr. Biju Velayudhan')}</span>
+                  <span class="detail-value">${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'cio'))}</span>
                 </div>
               </div>
               ${Approval.renderForSCR(scr.id)}
@@ -980,10 +980,12 @@ const SCRManager = {
                 <div class="form-group">
                   <label class="form-label">Received By</label>
                   <input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">
+                  <span class="form-hint">Auto-filled with the impl team member who accepts the request (Stage 1 → 2)</span>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Coordinated By</label>
                   <input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">
+                  <span class="form-hint">Auto-filled from department · editable if a different coordinator is handling this SCR</span>
                 </div>
               </div>
             `}
@@ -1280,10 +1282,19 @@ const SCRManager = {
   // ── Department change handler ───────────────────────────
   onDeptChange() {
     const deptName = document.getElementById('scr-dept')?.value;
+    if (!deptName) return;
+    const dept = Store.getAll('departments').find(d => d.name === deptName);
+    if (!dept) return;
+
+    // HOD auto-fill
     const hodField = document.getElementById('scr-hod');
-    if (deptName && hodField) {
-      const dept = Store.getAll('departments').find(d => d.name === deptName);
-      if (dept) hodField.value = dept.hodName;
+    if (hodField) hodField.value = dept.hodName || '';
+
+    // IT Coordinator auto-fill — only overwrite if currently empty,
+    // so a manually-typed coordinator isn't wiped when dept is re-selected
+    const coordField = document.getElementById('scr-coordinated-by');
+    if (coordField && !coordField.value.trim()) {
+      coordField.value = dept.coordinatorName || '';
     }
   },
 

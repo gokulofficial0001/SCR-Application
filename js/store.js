@@ -599,7 +599,7 @@ const Store = {
   // ── Migrate legacy data to current schema ────────
   // Runs on every app init. Idempotent — safe to re-run.
   migrate() {
-    const MIGRATION_VERSION = 5;
+    const MIGRATION_VERSION = 7;
     const current = this._get('migration_version') || 0;
     if (current >= MIGRATION_VERSION) return;
 
@@ -683,8 +683,99 @@ const Store = {
       }
     }
 
+    // v5 → v6: backfill coordinatorName / coordinatorEmail on existing
+    // departments. Match against Utils.defaultDepartments by name; for
+    // any custom-added department, leave coordinator blank (admin can
+    // fill via Master Data → Departments → Edit).
+    if (current < 6) {
+      const depts = this._get('departments') || [];
+      const defaultsByName = {};
+      (typeof Utils !== 'undefined' && Utils.defaultDepartments ? Utils.defaultDepartments : [])
+        .forEach(d => { defaultsByName[d.name] = d; });
+
+      let touched = false;
+      depts.forEach(d => {
+        if (d.coordinatorName === undefined) {
+          const def = defaultsByName[d.name];
+          d.coordinatorName  = def ? (def.coordinatorName  || '') : '';
+          d.coordinatorEmail = def ? (def.coordinatorEmail || '') : '';
+          touched = true;
+        }
+      });
+      if (touched) this._set('departments', depts);
+    }
+
+    // v6 → v7 (and onwards): wrong "Project Head / AGM-IT / CIO" names
+    // on existing SCRs. We invoke the standalone resync helper below;
+    // it's also wired to run unconditionally on every init so any stale
+    // names get corrected even if the install was already at v7.
+    // (Kept here for the version-bump record — the actual logic lives
+    // in resyncReviewerNames so it can also run outside migrate().)
+
     this._set('migration_version', MIGRATION_VERSION);
     console.log('✅ SCR Store migrated to v' + MIGRATION_VERSION);
+  },
+
+  // ── Self-healing resync of reviewer names on SCRs ────────
+  // For each SCR, look up the REAL person who advanced stages 3→4 and
+  // who decided at stage 4 (AGM/CIO), and correct projectHeadName /
+  // agmItName / cioName if they're stale. Idempotent — safe to call on
+  // every init. Logs corrections to console for diagnostics.
+  resyncReviewerNames() {
+    const scrs       = this._get('scr_requests')   || [];
+    const stages     = this._get('workflow_stages') || [];
+    const approvals  = this._get('approvals')      || [];
+    const users      = this._get('users')          || [];
+    if (scrs.length === 0) return;
+
+    const userById = {};
+    users.forEach(u => { userById[u.id] = u; });
+
+    const corrections = [];
+    let touched = false;
+
+    scrs.forEach(scr => {
+      // ── Project Head ──
+      // Stage 3's exitedBy (explicit advancer field) OR stage 4's
+      // performedBy (the user who created stage 4 = the advancer)
+      const stage3 = stages.find(w => w.scrId === scr.id && w.stage === 3 && w.exitedAt);
+      const stage4 = stages.find(w => w.scrId === scr.id && w.stage === 4);
+      const phAdvancerId = (stage3 && stage3.exitedBy) || (stage4 && stage4.performedBy) || null;
+      if (phAdvancerId) {
+        const phUser = userById[phAdvancerId];
+        if (phUser && phUser.role === 'project_head' && scr.projectHeadName !== phUser.name) {
+          corrections.push(`${scr.scrNumber}: PH "${scr.projectHeadName}" → "${phUser.name}"`);
+          scr.projectHeadName = phUser.name;
+          touched = true;
+        }
+      }
+
+      // ── AGM-IT ── most recent approval by agm_it
+      const agmDecision = approvals
+        .filter(a => a.scrId === scr.id && a.approverRole === 'agm_it')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (agmDecision && scr.agmItName !== agmDecision.approverName) {
+        corrections.push(`${scr.scrNumber}: AGM "${scr.agmItName}" → "${agmDecision.approverName}"`);
+        scr.agmItName = agmDecision.approverName;
+        touched = true;
+      }
+
+      // ── CIO ── most recent approval by cio
+      const cioDecision = approvals
+        .filter(a => a.scrId === scr.id && a.approverRole === 'cio')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (cioDecision && scr.cioName !== cioDecision.approverName) {
+        corrections.push(`${scr.scrNumber}: CIO "${scr.cioName}" → "${cioDecision.approverName}"`);
+        scr.cioName = cioDecision.approverName;
+        touched = true;
+      }
+    });
+
+    if (touched) {
+      this._set('scr_requests', scrs);
+      console.log(`✅ Resynced reviewer names on ${corrections.length} SCR(s):`);
+      corrections.forEach(c => console.log('   • ' + c));
+    }
   },
 
   // ── Reset all data ──────────────────────────────────────

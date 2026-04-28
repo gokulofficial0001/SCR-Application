@@ -41,6 +41,7 @@ const MasterData = {
                 <th>Department Name</th>
                 <th>HOD Name</th>
                 <th>HOD Email</th>
+                <th>IT Coordinator</th>
                 <th>SCRs</th>
                 <th>Actions</th>
               </tr>
@@ -54,6 +55,7 @@ const MasterData = {
                     <td class="font-medium">${Utils.escapeHtml(d.name)}</td>
                     <td class="text-sm">${Utils.escapeHtml(d.hodName)}</td>
                     <td class="text-sm text-tertiary">${Utils.escapeHtml(d.hodEmail)}</td>
+                    <td class="text-sm">${Utils.escapeHtml(d.coordinatorName || '—')}</td>
                     <td>${Utils.badgeHtml(scrCount.toString(), scrCount > 0 ? 'primary' : 'neutral')}</td>
                     <td class="action-cell">
                       <button class="btn btn-ghost btn-icon sm" data-tooltip="Edit" onclick="MasterData.showDeptForm('${d.id}')">✏️</button>
@@ -177,6 +179,15 @@ const MasterData = {
             <label class="form-label">HOD Email</label>
             <input type="email" class="form-input" id="dept-email" value="${Utils.escapeHtml(dept.hodEmail || '')}" placeholder="e.g., ramesh@hospital.in">
           </div>
+          <div class="form-group">
+            <label class="form-label">IT Coordinator Name</label>
+            <input type="text" class="form-input" id="dept-coordinator" value="${Utils.escapeHtml(dept.coordinatorName || '')}" placeholder="e.g., Mr. Arjun M">
+            <span class="form-hint">Auto-fills the "Coordinated By" field on SCRs from this department</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">IT Coordinator Email</label>
+            <input type="email" class="form-input" id="dept-coordinator-email" value="${Utils.escapeHtml(dept.coordinatorEmail || '')}" placeholder="e.g., arjun@hospital.in">
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" onclick="document.getElementById('dept-modal').remove()">Cancel</button>
@@ -191,18 +202,22 @@ const MasterData = {
     const name = document.getElementById('dept-name').value.trim();
     const hodName = document.getElementById('dept-hod').value.trim();
     const hodEmail = document.getElementById('dept-email').value.trim();
+    const coordinatorName = document.getElementById('dept-coordinator').value.trim();
+    const coordinatorEmail = document.getElementById('dept-coordinator-email').value.trim();
 
     if (!name || !hodName) {
       Utils.toast('warning', 'Required', 'Name and HOD are required');
       return;
     }
 
+    const payload = { name, hodName, hodEmail, coordinatorName, coordinatorEmail };
+
     if (editId) {
-      Store.update('departments', editId, { name, hodName, hodEmail });
+      Store.update('departments', editId, payload);
       Audit.log('Department', editId, 'Updated', 'name', null, name);
       Utils.toast('success', 'Updated', `${name} department updated`);
     } else {
-      Store.add('departments', { name, hodName, hodEmail });
+      Store.add('departments', payload);
       Audit.log('Department', name, 'Created', null, null, name);
       Utils.toast('success', 'Added', `${name} department added`);
     }

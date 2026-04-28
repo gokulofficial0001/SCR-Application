@@ -9,6 +9,9 @@ const App = {
     Store.seed();
     // Backfill / rename legacy data in existing localStorage
     Store.migrate();
+    // Self-healing: re-derive PH/AGM/CIO names from workflow + approvals
+    // every load (idempotent — only writes if names actually differ)
+    Store.resyncReviewerNames();
     // Trim old audit / notifications so quota stays healthy
     Store.pruneRoutine();
     // Cross-tab sync — listen for session changes and storage events
@@ -52,9 +55,9 @@ const App = {
   // ── Minimal view (focused single-action tab) ────────────
   renderMinimal(action) {
     const info = {
-      'create-scr': { icon: '📝', title: 'New Change Request',   sub: 'Submit a software change request to the Hospital IT team' },
-      'track':      { icon: '🔍', title: 'Track Request Status', sub: 'Check the progress of an existing SCR' },
-      'feedback':   { icon: '⭐', title: 'Give Feedback',          sub: 'Rate the delivery of a completed request' }
+      'create-scr': { icon: '📝', title: 'New Change Request', sub: 'Submit a software change request to the Hospital IT team' },
+      'track': { icon: '🔍', title: 'Track Request Status', sub: 'Check the progress of an existing SCR' },
+      'feedback': { icon: '⭐', title: 'Give Feedback', sub: 'Rate the delivery of a completed request' }
     }[action] || { icon: '📋', title: 'Self Service', sub: '' };
 
     document.body.dataset.mode = 'minimal';

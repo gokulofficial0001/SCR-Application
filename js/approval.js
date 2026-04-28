@@ -66,6 +66,20 @@ const Approval = {
       timestamp: Utils.nowISO()
     });
 
+    // Sync the SCR's stored approver-name field with the actual decider so
+    // the Management Approval card shows the real person (not the default).
+    // Only when role matches — admin acting on behalf keeps the existing value.
+    const scrPre = Store.getById('scr_requests', scrId);
+    if (scrPre) {
+      let nameField = null;
+      if (user.role === 'agm_it') nameField = 'agmItName';
+      else if (user.role === 'cio') nameField = 'cioName';
+      if (nameField && scrPre[nameField] !== user.name) {
+        Store.update('scr_requests', scrId, { [nameField]: user.name });
+        Audit.log('SCR', scrId, 'Auto-filled', nameField, scrPre[nameField] || '', user.name);
+      }
+    }
+
     Audit.log('SCR', scrId, decision, 'decision', null, decision, user.name, user.role);
 
     const scr = Store.getById('scr_requests', scrId);

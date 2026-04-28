@@ -401,10 +401,18 @@ const SelfService = {
 
   onQuickDeptChange() {
     const deptName = document.getElementById('quick-dept')?.value;
+    if (!deptName) return;
+    const dept = Store.getAll('departments').find(d => d.name === deptName);
+    if (!dept) return;
+
     const hodField = document.getElementById('quick-hod');
-    if (deptName && hodField) {
-      const dept = Store.getAll('departments').find(d => d.name === deptName);
-      if (dept) hodField.value = dept.hodName;
+    if (hodField) hodField.value = dept.hodName || '';
+
+    // IT Coordinator — hidden for requesters but the dept's coordinator
+    // is auto-stamped onto the SCR so IT side knows the routing
+    const coordField = document.getElementById('quick-coordinated-by');
+    if (coordField && !coordField.value.trim()) {
+      coordField.value = dept.coordinatorName || '';
     }
   },
 
