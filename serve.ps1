@@ -120,7 +120,7 @@ try {
         $ext = [System.IO.Path]::GetExtension($file).ToLower()
         $ct = if ($mime.ContainsKey($ext)) { $mime[$ext] } else { 'application/octet-stream' }
         $body = [System.IO.File]::ReadAllBytes($file)
-        $hdr = "HTTP/1.1 200 OK`r`nContent-Type: $ct`r`nContent-Length: $($body.Length)`r`nCache-Control: no-cache`r`nAccess-Control-Allow-Origin: *`r`nConnection: close`r`n`r`n"
+        $hdr = "HTTP/1.1 200 OK`r`nContent-Type: $ct`r`nContent-Length: $($body.Length)`r`nCache-Control: no-store, no-cache, must-revalidate, max-age=0`r`nPragma: no-cache`r`nExpires: 0`r`nAccess-Control-Allow-Origin: *`r`nConnection: close`r`n`r`n"
         $hb = [System.Text.Encoding]::UTF8.GetBytes($hdr)
         $stream.Write($hb, 0, $hb.Length); $stream.Write($body, 0, $body.Length)
         Write-Host ("  200 {0,-5} {1}" -f $method, $decoded) -ForegroundColor DarkGray

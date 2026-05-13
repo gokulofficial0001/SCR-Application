@@ -22,6 +22,7 @@ const Approval = {
     const scr = Store.getById('scr_requests', scrId);
     if (!scr || scr.currentStage !== 4) return false;
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (scr.status === 'On Hold') return false;  // resume before approving
     if (!this.approvalChain.includes(user.role)) return false;
 
     // Conflict-of-interest: an approver cannot sign off on their own request
@@ -103,6 +104,11 @@ const Approval = {
       Store.update('scr_requests', scrId, {
         currentStage: toStage,
         status: 'In Progress',
+        // Clear PH acceptance — it was for the previous round of review.
+        // When this SCR returns to Stage 3 after re-review, PH must
+        // accept again as a fresh decision.
+        phAcceptedBy: '',
+        phAcceptedAt: null,
         lastRejection: {
           fromStage: 4,
           fromStageName: Utils.getStageName(4),
@@ -115,6 +121,8 @@ const Approval = {
           at: Utils.nowISO()
         }
       });
+
+      Audit.log('SCR', scrId, 'Auto-cleared', 'phAcceptedBy', 'set', '(cleared on Mgmt Approval rejection back to Stage 2)');
 
       Audit.log('SCR', scrId, 'Stage Rejected', 'currentStage', Utils.getStageName(4), Utils.getStageName(2), user.name, user.role);
 
@@ -142,13 +150,11 @@ const Approval = {
 
         Audit.log('SCR', scrId, 'Stage Advanced', 'currentStage', Utils.getStageName(4), Utils.getStageName(5), user.name, user.role);
 
-        // Notify developer(s)
-        if (scr.assignedDeveloper) {
-          Notifications.create(scr.assignedDeveloper, `${scr.scrNumber} has been approved by management — ready for development`, 'assignment', scrId);
-        }
-        if (scr.assignedDeveloper2) {
-          Notifications.create(scr.assignedDeveloper2, `${scr.scrNumber} has been approved by management — ready for development`, 'assignment', scrId);
-        }
+        // Route the developer notification through the shared stage-change
+        // notifier so both Primary and Secondary devs are always notified
+        // with the SAME message and dedupe rules as any other stage advance.
+        const updatedScr = Store.getById('scr_requests', scrId);
+        if (updatedScr) Notifications.notifyStageChange(updatedScr, fromStage, toStage);
       } else {
         // First approval received — notify the other approver
         const nextRole = this.approvalChain.find(r => r !== user.role);

@@ -4,15 +4,18 @@
 
 const Audit = {
   // ── Log an action ───────────────────────────────────────
+  // Preserve falsy-but-meaningful values like 0 / false / "" — only
+  // null/undefined become null. Coerces everything else via String().
   log(entityType, entityId, action, field, oldValue, newValue, performedBy, role) {
+    const norm = v => (v === null || v === undefined) ? null : String(v);
     const entry = {
       id: Utils.generateId(),
       entityType,
       entityId,
       action,
       field,
-      oldValue: oldValue ? String(oldValue) : null,
-      newValue: newValue ? String(newValue) : null,
+      oldValue: norm(oldValue),
+      newValue: norm(newValue),
       performedBy: performedBy || Auth.currentUser()?.name || 'System',
       role: role || Auth.currentUser()?.role || 'system',
       timestamp: Utils.nowISO()

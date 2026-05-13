@@ -1,62 +1,162 @@
 /* ============================================================
-   SCR MANAGEMENT SYSTEM — Data Store (localStorage)
-   Provides CRUD, seed data, and reactive state management
+   SCR MANAGEMENT SYSTEM — Data Store (SQLite backend via /api)
+   In-memory cache hydrated from server on boot. Mutations update
+   the cache synchronously AND fire-and-forget a fetch() to the
+   server so the public API stays sync (no caller changes needed).
+   Session stays in localStorage (per-device, not shared).
    ============================================================ */
 
 const Store = {
-  // ── Core CRUD ───────────────────────────────────────────
-  _get(key) {
-    try {
-      const data = localStorage.getItem(`scr_${key}`);
-      return data ? JSON.parse(data) : null;
-    } catch (e) {
-      console.error(`Store._get(${key}) error — data may be corrupted:`, e);
-      // Best-effort recovery: remove corrupted key so app can continue
-      try { localStorage.removeItem(`scr_${key}`); } catch {}
-      return null;
+  // ── Storage backend constants ───────────────────────────
+  // COLLECTIONS = array-shaped data (mirror server's COLLECTIONS list)
+  COLLECTIONS: [
+    'users', 'departments', 'scr_requests', 'workflow_stages',
+    'approvals', 'feedback', 'notifications', 'development_updates',
+    'audit_log', 'sla_config'
+  ],
+  // META_KEYS = singleton key/value entries (object or scalar)
+  META_KEYS: ['seeded', 'migration_version', 'role_permissions'],
+
+  // ── In-memory state ─────────────────────────────────────
+  _cache: {},          // { collection: [items] }
+  _meta: {},           // { key: value }
+  _ready: false,       // true after hydrate succeeds
+  _bootBatch: false,   // when true, mutations defer server writes
+  _bootDirty: { collections: new Set(), meta: new Set() },
+  _networkErrorShown: false,
+
+  // ── Hydrate from server (call once on App.init) ─────────
+  async hydrate() {
+    const res = await fetch('/api/admin/snapshot', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const snap = await res.json();
+
+    this._cache = {};
+    this.COLLECTIONS.forEach(c => {
+      this._cache[c] = Array.isArray(snap[c]) ? snap[c] : [];
+    });
+    this._meta = (snap && snap._meta) || {};
+    this._ready = true;
+
+    // First-run migration: if server is empty but THIS browser has
+    // pre-backend localStorage data, push it up so nothing is lost.
+    const serverHasData = this._meta.seeded === true;
+    const localHasData = typeof localStorage !== 'undefined' && localStorage.getItem('scr_seeded') === 'true';
+    if (!serverHasData && localHasData) {
+      await this._migrateLocalStorageToServer();
     }
+  },
+
+  async _migrateLocalStorageToServer() {
+    console.log('🚚 Migrating localStorage data to server (one-time)…');
+    const payload = {};
+    for (const c of this.COLLECTIONS) {
+      try {
+        const raw = localStorage.getItem(`scr_${c}`);
+        payload[c] = raw ? JSON.parse(raw) : [];
+      } catch { payload[c] = []; }
+    }
+    payload._meta = {};
+    for (const k of this.META_KEYS) {
+      try {
+        const raw = localStorage.getItem(`scr_${k}`);
+        if (raw) payload._meta[k] = JSON.parse(raw);
+      } catch {}
+    }
+    const res = await fetch('/api/admin/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`Migration import failed: ${res.status}`);
+
+    // Reload from server so cache reflects post-import state
+    const snap = await (await fetch('/api/admin/snapshot', { cache: 'no-store' })).json();
+    this._cache = {};
+    this.COLLECTIONS.forEach(c => { this._cache[c] = Array.isArray(snap[c]) ? snap[c] : []; });
+    this._meta = (snap && snap._meta) || {};
+
+    console.log('✅ Migration complete — localStorage kept as backup');
+    if (typeof Utils !== 'undefined' && Utils.toast) {
+      Utils.toast('success', 'Migrated to Server', 'Your existing data has moved to the shared database.');
+    }
+  },
+
+  // ── Boot batch — coalesce seed/migrate writes into bulk PUTs ──
+  beginBootBatch() {
+    this._bootBatch = true;
+    this._bootDirty.collections.clear();
+    this._bootDirty.meta.clear();
+  },
+
+  async commitBootBatch() {
+    this._bootBatch = false;
+    const colls = [...this._bootDirty.collections];
+    const metas = [...this._bootDirty.meta];
+    this._bootDirty.collections.clear();
+    this._bootDirty.meta.clear();
+    const tasks = [];
+    for (const c of colls) {
+      tasks.push(this._fetchSafe('PUT', `/api/${c}`, this._cache[c] || []));
+    }
+    for (const k of metas) {
+      tasks.push(this._fetchSafe('PUT', `/api/meta/${k}`, this._meta[k]));
+    }
+    await Promise.all(tasks);
+  },
+
+  // ── Internal: fire-and-forget fetch with shared error handling ──
+  _fetchSafe(method, url, body) {
+    const opts = { method, headers: {} };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts)
+      .then(r => {
+        if (!r.ok) throw new Error(`${method} ${url} → ${r.status}`);
+        return r;
+      })
+      .catch(e => this._handleNetworkError(e));
+  },
+
+  _handleNetworkError(e) {
+    console.error('Store sync failed:', e);
+    if (this._networkErrorShown) return;
+    this._networkErrorShown = true;
+    if (typeof Utils !== 'undefined' && Utils.toast) {
+      Utils.toast('warning', 'Sync Error', 'Could not save to server. Check the connection.');
+    }
+    setTimeout(() => { this._networkErrorShown = false; }, 5000);
+  },
+
+  // ── Internal: route key to either collection cache or meta ──
+  _isCollection(key) { return this.COLLECTIONS.includes(key); },
+
+  _get(key) {
+    if (this._isCollection(key)) return this._cache[key] || null;
+    return Object.prototype.hasOwnProperty.call(this._meta, key) ? this._meta[key] : null;
   },
 
   _set(key, value) {
-    const payload = JSON.stringify(value);
-    try {
-      localStorage.setItem(`scr_${key}`, payload);
-    } catch (e) {
-      // QuotaExceededError or similar — try to recover by pruning
-      if (e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)) {
-        console.warn(`Store._set(${key}): quota exceeded, pruning logs…`);
-        this._prune();
-        try {
-          localStorage.setItem(`scr_${key}`, payload);
-          return;
-        } catch (e2) {
-          console.error(`Store._set(${key}) still failed after prune:`, e2);
-          if (typeof Utils !== 'undefined' && Utils.toast) {
-            Utils.toast('error', 'Storage Full', 'Local storage is full. Please export and clear old data.');
-          }
-          return;
-        }
+    if (this._isCollection(key)) {
+      this._cache[key] = value;
+      if (this._bootBatch) {
+        this._bootDirty.collections.add(key);
+      } else {
+        this._fetchSafe('PUT', `/api/${key}`, value);
       }
-      console.error(`Store._set(${key}) error:`, e);
+    } else {
+      this._meta[key] = value;
+      if (this._bootBatch) {
+        this._bootDirty.meta.add(key);
+      } else {
+        this._fetchSafe('PUT', `/api/meta/${key}`, value);
+      }
     }
   },
 
-  // ── Prune old audit/notification records to recover quota ──
-  _prune() {
-    // Keep last 500 audit entries + delete notifications older than 60 days
-    const cutoff = Date.now() - 60 * 86400000;
-    const audit = (this._get('audit_log') || []).slice(-500);
-    try { localStorage.setItem('scr_audit_log', JSON.stringify(audit)); } catch {}
-
-    const notifs = (this._get('notifications') || []).filter(n => {
-      if (!n.read) return true; // keep unread
-      const ts = new Date(n.timestamp).getTime();
-      return !isNaN(ts) && ts >= cutoff;
-    });
-    try { localStorage.setItem('scr_notifications', JSON.stringify(notifs)); } catch {}
-  },
-
-  // ── Routine pruning — called on app init ──
+  // ── Routine pruning — operates on cache, flushes via _set ──
   pruneRoutine() {
     const audit = this._get('audit_log') || [];
     if (audit.length > 2000) {
@@ -75,7 +175,7 @@ const Store = {
   },
 
   getAll(collection) {
-    return this._get(collection) || [];
+    return this._cache[collection] || [];
   },
 
   getById(collection, id) {
@@ -84,12 +184,16 @@ const Store = {
   },
 
   add(collection, item) {
-    const items = this.getAll(collection);
     if (!item.id) item.id = Utils.generateId();
     if (!item.createdAt) item.createdAt = Utils.nowISO();
     item.updatedAt = Utils.nowISO();
-    items.push(item);
-    this._set(collection, items);
+    if (!this._cache[collection]) this._cache[collection] = [];
+    this._cache[collection].push(item);
+    if (this._bootBatch) {
+      this._bootDirty.collections.add(collection);
+    } else {
+      this._fetchSafe('POST', `/api/${collection}`, item);
+    }
     this._notify(collection, 'add', item);
     return item;
   },
@@ -138,6 +242,9 @@ const Store = {
       completedOn: null,
       acknowledgedBy: '',
       acknowledgedAt: null,
+      // Project Head accept-for-review (gates Stage 3 advance)
+      phAcceptedBy: '',
+      phAcceptedAt: null,
 
       // Section 8 – Approval
       approvalStatus: '',     // Approved / Not Approved / Hold
@@ -162,7 +269,14 @@ const Store = {
       lastRejection: null,  // { fromStage, fromStageName, toStage, toStageName, remarks, by, byId, byRole, at }
       rejectionRemarks: '',
       rejectedBy: '',
-      rejectedAt: null
+      rejectedAt: null,
+
+      // Hold tracking (populated by Workflow.holdStage / cleared on resume)
+      holdReason: '',
+      heldBy: '',
+      heldAt: null,
+      holdAtStage: null,
+      lastHold: null  // { stage, stageName, reason, by, byId, byRole, at } — preserved across resume
     };
   },
 
@@ -171,33 +285,43 @@ const Store = {
     const idx = items.findIndex(item => item.id === id);
     if (idx === -1) return null;
     const oldItem = { ...items[idx] };
-    items[idx] = { ...items[idx], ...updates, updatedAt: Utils.nowISO() };
-    this._set(collection, items);
-    this._notify(collection, 'update', items[idx], oldItem);
-    return items[idx];
+    const merged = { ...items[idx], ...updates, updatedAt: Utils.nowISO() };
+    items[idx] = merged;
+    if (this._bootBatch) {
+      this._bootDirty.collections.add(collection);
+    } else {
+      this._fetchSafe('PATCH', `/api/${collection}/${id}`, { ...updates, updatedAt: merged.updatedAt });
+    }
+    this._notify(collection, 'update', merged, oldItem);
+    return merged;
   },
 
   remove(collection, id) {
-    let items = this.getAll(collection);
+    const items = this.getAll(collection);
     const item = items.find(i => i.id === id);
-    items = items.filter(i => i.id !== id);
-    this._set(collection, items);
-    if (item) {
-      this._notify(collection, 'remove', item);
-      // Cascade: when an SCR is deleted, purge dependent records
-      if (collection === 'scr_requests') this._cascadeDeleteSCR(id);
+    if (!item) return null;
+    this._cache[collection] = items.filter(i => i.id !== id);
+    if (this._bootBatch) {
+      this._bootDirty.collections.add(collection);
+    } else {
+      this._fetchSafe('DELETE', `/api/${collection}/${id}`);
     }
+    this._notify(collection, 'remove', item);
+    // Cascade: when an SCR is deleted, purge dependent records from cache.
+    // Server cascades automatically on DELETE /api/scr_requests/:id.
+    if (collection === 'scr_requests') this._cascadeDeleteSCR(id);
     return item;
   },
 
   // ── Cascade cleanup: remove all dependent records for a deleted SCR ──
+  // Cache-only: the server cascades automatically when DELETE /api/scr_requests/:id
+  // fires (see CASCADE_ON_SCR_DELETE in server/routes.js). We just keep the
+  // local cache in sync so re-renders don't show orphan rows.
   _cascadeDeleteSCR(scrId) {
     ['workflow_stages', 'approvals', 'feedback', 'notifications', 'development_updates'].forEach(coll => {
-      const items = (this._get(coll) || []).filter(r => r.scrId !== scrId);
-      this._set(coll, items);
+      this._cache[coll] = (this._cache[coll] || []).filter(r => r.scrId !== scrId);
     });
-    // Audit log — mark SCR deletion but keep historic entries for compliance
-    // (NABH requires audit trail preservation; don't purge audit)
+    // Audit log preserved for NABH compliance.
   },
 
   // ── Query helpers ───────────────────────────────────────
@@ -227,16 +351,23 @@ const Store = {
   },
 
   // ── Session management ──────────────────────────────────
+  // Sessions are per-device, NEVER pushed to the shared server. Each
+  // browser/device has its own logged-in user. Stored in localStorage so
+  // cross-tab logout still works via the 'storage' event in app.js.
   getSession() {
-    return this._get('session');
+    try {
+      const raw = localStorage.getItem('scr_session');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   },
 
   setSession(user) {
-    this._set('session', user);
+    try { localStorage.setItem('scr_session', JSON.stringify(user)); }
+    catch (e) { console.error('Session save failed:', e); }
   },
 
   clearSession() {
-    localStorage.removeItem('scr_session');
+    try { localStorage.removeItem('scr_session'); } catch {}
   },
 
   // ── Check if seeded ─────────────────────────────────────
@@ -248,20 +379,27 @@ const Store = {
   seed() {
     if (this.isSeeded()) return;
 
-    // Users
+    // Users — GKNM Information Technology department staff
+    const ITDept = 'Information Technology';
     const users = [
-      { id: 'user_admin', name: 'System Admin', username: 'admin', password: 'admin123', role: 'admin', email: 'admin@hospital.in', department: 'IT Department' },
-      { id: 'user_cio', name: 'Mr. Biju Velayudhan', username: 'cio', password: 'cio123', role: 'cio', email: 'biju@hospital.in', department: 'IT Department' },
-      { id: 'user_agm', name: 'Mr. S. Saravanakumar', username: 'agm', password: 'agm123', role: 'agm_it', email: 'saravanakumar@hospital.in', department: 'IT Department' },
-      { id: 'user_ph', name: 'Ms. Deepa S', username: 'projecthead', password: 'ph123', role: 'project_head', email: 'deepa@hospital.in', department: 'IT Department' },
-      { id: 'user_impl', name: 'Mr. Arjun M', username: 'impl', password: 'impl123', role: 'implementation', email: 'arjun@hospital.in', department: 'IT Department' },
-      { id: 'user_impl2', name: 'Mr. Suresh Kumar', username: 'impl2', password: 'impl123', role: 'implementation', email: 'suresh@hospital.in', department: 'IT Department' },
-      { id: 'user_dev1', name: 'Ms. Preethi N', username: 'developer', password: 'dev123', role: 'developer', email: 'preethi@hospital.in', department: 'IT Department' },
-      { id: 'user_dev2', name: 'Mr. Kiran Raj', username: 'developer2', password: 'dev123', role: 'developer', email: 'kiran@hospital.in', department: 'IT Department' },
-      { id: 'user_dev3', name: 'Ms. Swathi V', username: 'developer3', password: 'dev123', role: 'developer', email: 'swathi@hospital.in', department: 'IT Department' },
-      { id: 'user_req1', name: 'Dr. Ramesh Kumar', username: 'requester', password: 'req123', role: 'requester', email: 'ramesh@hospital.in', department: 'Cardiology' },
-      { id: 'user_req2', name: 'Dr. Priya Sharma', username: 'requester2', password: 'req123', role: 'requester', email: 'priya@hospital.in', department: 'Radiology' },
-      { id: 'user_req3', name: 'Mr. Ganesh Babu', username: 'requester3', password: 'req123', role: 'requester', email: 'ganesh@hospital.in', department: 'Pharmacy' }
+      { id: 'user_admin',  name: 'System Admin',         username: 'admin',        password: 'admin123', role: 'admin',          email: 'admin@hospital.in',         department: ITDept },
+      { id: 'user_cio',    name: 'Mr. Biju Velayudhan',  username: 'cio',          password: 'cio123',   role: 'cio',            email: 'biju@hospital.in',          department: ITDept },
+      { id: 'user_agm',    name: 'Mr. S. Saravanakumar', username: 'agm',          password: 'agm123',   role: 'agm_it',         email: 'saravanakumar@hospital.in', department: ITDept },
+      // Project Heads
+      { id: 'user_ph',     name: 'Mr. Panneer Selvan',   username: 'projecthead',  password: 'ph123',    role: 'project_head',   email: 'panneer@hospital.in',       department: ITDept },
+      { id: 'user_ph2',    name: 'Mr. T.V Raam Kumar',   username: 'projecthead2', password: 'ph123',    role: 'project_head',   email: 'raamkumar@hospital.in',     department: ITDept },
+      // Implementation Team
+      { id: 'user_impl',   name: 'Mrs. Saranya P',       username: 'impl',         password: 'impl123',  role: 'implementation', email: 'saranya.p@hospital.in',     department: ITDept },
+      { id: 'user_impl2',  name: 'Mr. Gokulraj S',       username: 'impl2',        password: 'impl123',  role: 'implementation', email: 'gokulraj@hospital.in',      department: ITDept },
+      { id: 'user_impl3',  name: 'Mr. Nantha Kumar S',   username: 'impl3',        password: 'impl123',  role: 'implementation', email: 'nantha@hospital.in',        department: ITDept },
+      // Development Team
+      { id: 'user_dev1',   name: 'Mrs. Saranya R',       username: 'developer',    password: 'dev123',   role: 'developer',      email: 'saranya.r@hospital.in',     department: ITDept },
+      { id: 'user_dev2',   name: 'Mr. Yoganandham S',    username: 'developer2',   password: 'dev123',   role: 'developer',      email: 'yoga@hospital.in',          department: ITDept },
+      { id: 'user_dev3',   name: 'Mr. Chakravarthy',     username: 'developer3',   password: 'dev123',   role: 'developer',      email: 'chakra@hospital.in',        department: ITDept },
+      // Requesters (departmental)
+      { id: 'user_req1',   name: 'Dr. Ramesh Kumar',     username: 'requester',    password: 'req123',   role: 'requester',      email: 'ramesh@hospital.in',        department: 'Cardiology' },
+      { id: 'user_req2',   name: 'Dr. Priya Sharma',     username: 'requester2',   password: 'req123',   role: 'requester',      email: 'priya@hospital.in',         department: 'Radiology' },
+      { id: 'user_req3',   name: 'Mr. Ganesh Babu',      username: 'requester3',   password: 'req123',   role: 'requester',      email: 'ganesh@hospital.in',        department: 'Pharmacy' }
     ];
     this._set('users', users);
 
@@ -278,10 +416,10 @@ const Store = {
     // Role Permissions (editable via User Rights module — mirrors Auth.permissions defaults)
     this._set('role_permissions', {
       admin:          { pages: ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','reports','master-data','notifications','settings'], actions: ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','view_reports','reset_data'] },
-      cio:            { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
-      agm_it:         { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','view_audit'] },
-      project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','view_audit'] },
-      implementation: { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','close_ticket','view_audit'] },
+      cio:            { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','hold','view_audit'] },
+      agm_it:         { pages: ['dashboard','scr-list','scr-detail','approvals','feedback','audit','notifications'], actions: ['approve','reject','hold','view_audit'] },
+      project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','hold','view_audit'] },
+      implementation: { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','hold','close_ticket','view_audit'] },
       developer:      { pages: ['dashboard','scr-list','scr-detail','feedback','notifications'], actions: ['edit_scr','advance_stage'] },
       requester:      { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
     });
@@ -301,13 +439,13 @@ const Store = {
         reasonForChange: 'Patient safety improvement in ICU ward',
         problemSolved: 'Delayed detection of critical cardiac events due to manual monitoring',
         expectedImpact: 'Reduce cardiac event response time from 15 min to under 2 min',
-        requestedBy: 'Dr. Ramesh Kumar', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Dr. Ramesh Kumar', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Cardiology', hodName: 'Dr. Ramesh Kumar',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: 'Mr. Ravi Shankar',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: 'Mr. Nantha Kumar S',
         assignedDeveloper: 'user_dev1', assignedDeveloper2: 'user_dev2',
         assignedOn: daysAgo(9).split('T')[0], studyDateFrom: daysAgo(9).split('T')[0], studyDateTo: daysAgo(8).split('T')[0],
         scheduleDate: daysAgo(6).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 5, status: 'In Progress',
@@ -323,13 +461,13 @@ const Store = {
         reasonForChange: 'Radiologist workflow efficiency and diagnostic accuracy',
         problemSolved: 'Radiologists manually calculate measurements using paper and scale',
         expectedImpact: 'Reduce report generation time by 40%',
-        requestedBy: 'Dr. Priya Sharma', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Dr. Priya Sharma', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Radiology', hodName: 'Dr. Priya Sharma',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: '',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: '',
         assignedDeveloper: 'user_dev2', assignedDeveloper2: '',
         assignedOn: daysAgo(12).split('T')[0], studyDateFrom: daysAgo(13).split('T')[0], studyDateTo: daysAgo(12).split('T')[0],
         scheduleDate: daysAgo(10).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 4, status: 'In Progress',
@@ -345,14 +483,14 @@ const Store = {
         reasonForChange: 'Reduce medicine wastage and prevent expired stock dispensing',
         problemSolved: 'Expired medicines discovered during dispensing causing patient risk',
         expectedImpact: 'Zero expired medicine incidents, 30% reduction in wastage cost',
-        requestedBy: 'Mr. Ganesh Babu', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Mr. Ganesh Babu', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Pharmacy', hodName: 'Mr. Ganesh Babu',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: 'Mr. Ravi Shankar',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: 'Mr. Nantha Kumar S',
         assignedDeveloper: 'user_dev3', assignedDeveloper2: '',
         assignedOn: daysAgo(20).split('T')[0], studyDateFrom: daysAgo(21).split('T')[0], studyDateTo: daysAgo(20).split('T')[0],
         scheduleDate: daysAgo(18).split('T')[0], completedOn: daysAgo(6).split('T')[0],
         approvalStatus: 'Approved', approvalReason: 'Report format meets requirements. Approved for deployment.',
-        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: 'Good implementation. Approved for deployment.',
         remarkAgmIt: 'Verified and approved by AGM-IT.',
         remarkCio: 'Final approval granted. Well done team.',
@@ -370,13 +508,13 @@ const Store = {
         reasonForChange: 'ER efficiency and patient safety compliance',
         problemSolved: 'High-risk patients waiting too long due to no priority visibility',
         expectedImpact: 'Reduce critical patient wait time by 60%',
-        requestedBy: 'Dr. Vikram Singh', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Dr. Vikram Singh', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Emergency Medicine', hodName: 'Dr. Vikram Singh',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: '',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: '',
         assignedDeveloper: 'user_dev1', assignedDeveloper2: '',
         assignedOn: daysAgo(5).split('T')[0], studyDateFrom: daysAgo(6).split('T')[0], studyDateTo: daysAgo(5).split('T')[0],
         scheduleDate: daysAgo(3).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Implementation', attachments: [],
         currentStage: 3, status: 'In Progress',
@@ -392,14 +530,14 @@ const Store = {
         reasonForChange: 'GST compliance and billing accuracy',
         problemSolved: 'Manual GST errors causing claim rejections and audit issues',
         expectedImpact: 'Zero GST calculation errors, 50% faster claim processing',
-        requestedBy: 'Mr. Karthik R', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Mr. Karthik R', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Finance & Billing', hodName: 'Mr. Karthik R',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: 'Mr. Ravi Shankar',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: 'Mr. Nantha Kumar S',
         assignedDeveloper: 'user_dev2', assignedDeveloper2: 'user_dev3',
         assignedOn: daysAgo(30).split('T')[0], studyDateFrom: daysAgo(31).split('T')[0], studyDateTo: daysAgo(30).split('T')[0],
         scheduleDate: daysAgo(28).split('T')[0], completedOn: daysAgo(12).split('T')[0],
         approvalStatus: 'Approved', approvalReason: 'All billing requirements met.',
-        projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: 'Good implementation. Approved for deployment.',
         remarkAgmIt: 'Verified and approved.',
         remarkCio: 'Final approval granted.',
@@ -417,13 +555,13 @@ const Store = {
         reasonForChange: 'Patient safety – eliminate sample mix-up risk',
         problemSolved: 'Sample labeling errors causing wrong results and repeat tests',
         expectedImpact: 'Zero sample mix-up incidents, 25% faster TAT',
-        requestedBy: 'Dr. Saranya M', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Dr. Saranya M', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Laboratory', hodName: 'Dr. Saranya M',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: '',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: '',
         assignedDeveloper: 'user_dev3', assignedDeveloper2: '',
         assignedOn: daysAgo(3).split('T')[0], studyDateFrom: daysAgo(4).split('T')[0], studyDateTo: daysAgo(3).split('T')[0],
         scheduleDate: daysAgo(2).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 5, status: 'In Progress',
@@ -439,12 +577,12 @@ const Store = {
         reasonForChange: 'Nursing care continuity and patient safety',
         problemSolved: 'Critical patient info lost during shift change',
         expectedImpact: 'Structured handover reduces medication errors by 35%',
-        requestedBy: 'Ms. Anjali Thomas', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: '',
+        requestedBy: 'Ms. Anjali Thomas', receivedBy: 'Mrs. Saranya P', coordinatedBy: '',
         department: 'Nursing', hodName: 'Ms. Anjali Thomas',
         studyDoneByPrimary: '', studyDoneBySecondary: '',
         assignedDeveloper: '', assignedDeveloper2: '', assignedOn: null,
         studyDateFrom: null, studyDateTo: null, scheduleDate: null, completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 1, status: 'Open',
@@ -460,12 +598,12 @@ const Store = {
         reasonForChange: 'Clinical accuracy and NABH compliance',
         problemSolved: 'Outdated growth standards causing misdiagnosis in pediatric cases',
         expectedImpact: 'Improved diagnostic accuracy for 100% of pediatric consults',
-        requestedBy: 'Dr. Anil Gupta', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: '',
+        requestedBy: 'Dr. Anil Gupta', receivedBy: 'Mrs. Saranya P', coordinatedBy: '',
         department: 'Pediatrics', hodName: 'Dr. Anil Gupta',
         studyDoneByPrimary: '', studyDoneBySecondary: '',
         assignedDeveloper: '', assignedDeveloper2: '', assignedOn: null,
         studyDateFrom: null, studyDateTo: null, scheduleDate: null, completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 2, status: 'Open',
@@ -481,13 +619,13 @@ const Store = {
         reasonForChange: 'Patient experience and queue management',
         problemSolved: 'Long waiting time complaints and crowding at OPD reception',
         expectedImpact: 'Reduce patient wait complaints by 70%, improve patient satisfaction score',
-        requestedBy: 'Mr. Senthil Raja', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Mr. Senthil Raja', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'Administration', hodName: 'Mr. Senthil Raja',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: 'Mr. Ravi Shankar',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: 'Mr. Nantha Kumar S',
         assignedDeveloper: 'user_dev1', assignedDeveloper2: '',
         assignedOn: daysAgo(15).split('T')[0], studyDateFrom: daysAgo(16).split('T')[0], studyDateTo: daysAgo(15).split('T')[0],
         scheduleDate: daysAgo(12).split('T')[0], completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Implementation', attachments: [],
         currentStage: 6, status: 'In Progress',
@@ -503,13 +641,13 @@ const Store = {
         reasonForChange: 'OT utilization and surgical efficiency',
         problemSolved: 'OT scheduling conflicts causing surgery delays and cancellations',
         expectedImpact: 'Increase OT utilization from 60% to 90%, zero double-booking',
-        requestedBy: 'Dr. Meena Patel', receivedBy: 'Mr. Ravi Shankar', coordinatedBy: 'Mr. Arjun M',
+        requestedBy: 'Dr. Meena Patel', receivedBy: 'Mrs. Saranya P', coordinatedBy: 'Mr. Gokulraj S',
         department: 'General Surgery', hodName: 'Dr. Meena Patel',
-        studyDoneByPrimary: 'Mr. Arjun M', studyDoneBySecondary: '',
+        studyDoneByPrimary: 'Mrs. Saranya P', studyDoneBySecondary: '',
         assignedDeveloper: 'user_dev2', assignedDeveloper2: '',
         assignedOn: daysAgo(1).split('T')[0], studyDateFrom: daysAgo(2).split('T')[0], studyDateTo: daysAgo(1).split('T')[0],
         scheduleDate: Utils.today(), completedOn: null,
-        approvalStatus: '', approvalReason: '', projectHeadName: 'Ms. Deepa S', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
+        approvalStatus: '', approvalReason: '', projectHeadName: 'Mr. Panneer Selvan', agmItName: 'Mr. S. Saravanakumar', cioName: 'Mr. Biju Velayudhan',
         remarkProjectHead: '', remarkAgmIt: '', remarkCio: '',
         assignedTeam: 'Development', attachments: [],
         currentStage: 2, status: 'In Progress',
@@ -571,7 +709,7 @@ const Store = {
     // Sample audit log
     const auditLog = [
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Ramesh Kumar', role: 'requester', timestamp: daysAgo(10) },
-      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Stage Advanced', field: 'currentStage', oldValue: 'Requirement Submission', newValue: 'Implementation Review', performedBy: 'Mr. Arjun M', role: 'implementation', timestamp: daysAgo(9) },
+      { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_1', action: 'Stage Advanced', field: 'currentStage', oldValue: 'Requirement Submission', newValue: 'Implementation Review', performedBy: 'Mrs. Saranya P', role: 'implementation', timestamp: daysAgo(9) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_2', action: 'Created', field: null, oldValue: null, newValue: null, performedBy: 'Dr. Priya Sharma', role: 'requester', timestamp: daysAgo(14) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Approved', field: 'decision', oldValue: null, newValue: 'Approved', performedBy: 'Mr. Biju Velayudhan', role: 'cio', timestamp: daysAgo(8) },
       { id: Utils.generateId(), entityType: 'SCR', entityId: 'scr_5', action: 'Status Changed', field: 'status', oldValue: 'Completed', newValue: 'Closed', performedBy: 'System', role: 'admin', timestamp: daysAgo(8) },
@@ -599,7 +737,7 @@ const Store = {
   // ── Migrate legacy data to current schema ────────
   // Runs on every app init. Idempotent — safe to re-run.
   migrate() {
-    const MIGRATION_VERSION = 7;
+    const MIGRATION_VERSION = 11;
     const current = this._get('migration_version') || 0;
     if (current >= MIGRATION_VERSION) return;
 
@@ -634,7 +772,7 @@ const Store = {
     // Also rename stored approver names + ensure default Project Head
     const scrs = this._get('scr_requests') || [];
     scrs.forEach(s => {
-      if (!s.projectHeadName) s.projectHeadName = 'Ms. Deepa S';
+      if (!s.projectHeadName) s.projectHeadName = 'Mr. Panneer Selvan';
       s.agmItName = nameMap[s.agmItName] || s.agmItName || 'Mr. S. Saravanakumar';
       s.cioName   = nameMap[s.cioName]   || s.cioName   || 'Mr. Biju Velayudhan';
 
@@ -712,8 +850,285 @@ const Store = {
     // (Kept here for the version-bump record — the actual logic lives
     // in resyncReviewerNames so it can also run outside migrate().)
 
+    // v7 → v8: replace placeholder/demo staff names with real GKNM
+    // Information Technology department staff. Existing user IDs are
+    // RENAMED in place (preserves SCR references like assignedDeveloper)
+    // rather than deleted. Two new accounts are added: impl3 + ph2.
+    if (current < 8) {
+      const users = this._get('users') || [];
+      const byId = {};
+      users.forEach(u => { byId[u.id] = u; });
+
+      const ITDept = 'Information Technology';
+      const renameOrAdd = [
+        // Implementation Team
+        { id: 'user_impl',  name: 'Mrs. Saranya P',     username: 'impl',         password: 'impl123', role: 'implementation', email: 'saranya.p@hospital.in',  department: ITDept },
+        { id: 'user_impl2', name: 'Mr. Gokulraj S',     username: 'impl2',        password: 'impl123', role: 'implementation', email: 'gokulraj@hospital.in',   department: ITDept },
+        { id: 'user_impl3', name: 'Mr. Nantha Kumar S', username: 'impl3',        password: 'impl123', role: 'implementation', email: 'nantha@hospital.in',     department: ITDept },
+        // Development Team
+        { id: 'user_dev1',  name: 'Mrs. Saranya R',     username: 'developer',    password: 'dev123',  role: 'developer',      email: 'saranya.r@hospital.in',  department: ITDept },
+        { id: 'user_dev2',  name: 'Mr. Yoganandham S',  username: 'developer2',   password: 'dev123',  role: 'developer',      email: 'yoga@hospital.in',       department: ITDept },
+        { id: 'user_dev3',  name: 'Mr. Chakravarthy',   username: 'developer3',   password: 'dev123',  role: 'developer',      email: 'chakra@hospital.in',     department: ITDept },
+        // Project Heads
+        { id: 'user_ph',    name: 'Mr. Panneer Selvan', username: 'projecthead',  password: 'ph123',   role: 'project_head',   email: 'panneer@hospital.in',    department: ITDept },
+        { id: 'user_ph2',   name: 'Mr. T.V Raam Kumar', username: 'projecthead2', password: 'ph123',   role: 'project_head',   email: 'raamkumar@hospital.in',  department: ITDept }
+      ];
+
+      renameOrAdd.forEach(spec => {
+        const cur = byId[spec.id];
+        if (cur) {
+          // Update name/email/department (preserve role + login creds if admin changed them)
+          cur.name = spec.name;
+          cur.email = spec.email;
+          cur.department = ITDept;
+          if (!cur.username) cur.username = spec.username;
+          if (!cur.password) cur.password = spec.password;
+          if (!cur.role)     cur.role     = spec.role;
+        } else {
+          users.push({ ...spec, createdAt: Utils.nowISO(), updatedAt: Utils.nowISO() });
+        }
+      });
+
+      // Also reassign all admin/cio/agm to "Information Technology" so the
+      // department label matches the rebrand
+      ['user_admin', 'user_cio', 'user_agm'].forEach(id => {
+        const u = byId[id];
+        if (u) u.department = ITDept;
+      });
+
+      this._set('users', users);
+
+      // Ensure "Information Technology" department exists in the depts table
+      const depts = this._get('departments') || [];
+      const itExists = depts.find(d => d.name === ITDept);
+      if (!itExists) {
+        // If the legacy "IT Department" exists, RENAME it (preserves dept_id)
+        const legacy = depts.find(d => d.name === 'IT Department');
+        if (legacy) {
+          legacy.name = ITDept;
+          legacy.coordinatorName  = legacy.coordinatorName  || 'Mr. Gokulraj S';
+          legacy.coordinatorEmail = legacy.coordinatorEmail || 'gokulraj@hospital.in';
+          if (!legacy.hodName) legacy.hodName = 'Mr. Panneer Selvan';
+          if (!legacy.hodEmail) legacy.hodEmail = 'panneer@hospital.in';
+        } else {
+          depts.push({
+            id: Utils.generateId(),
+            name: ITDept,
+            hodName: 'Mr. Panneer Selvan',
+            hodEmail: 'panneer@hospital.in',
+            coordinatorName: 'Mr. Gokulraj S',
+            coordinatorEmail: 'gokulraj@hospital.in'
+          });
+        }
+        this._set('departments', depts);
+      }
+    }
+
+    // v8 → v9: replace OLD demo staff names already baked into existing
+    // SCR snapshot fields, workflow notes, approvals, dev updates, and
+    // audit log so the new staff names appear EVERYWHERE consistently.
+    // (User IDs are stable — only stored display strings need cleanup.)
+    if (current < 9) {
+      const nameMap = {
+        'Mr. Arjun M':       'Mrs. Saranya P',
+        'Mr. Suresh Kumar':  'Mr. Gokulraj S',
+        'Ms. Preethi N':     'Mrs. Saranya R',
+        'Mr. Kiran Raj':     'Mr. Yoganandham S',
+        'Ms. Swathi V':      'Mr. Chakravarthy',
+        'Ms. Deepa S':       'Mr. Panneer Selvan'
+      };
+      const oldNames = Object.keys(nameMap);
+
+      // Helper: replace whole-string match
+      const swap = (s) => (s && nameMap[s]) ? nameMap[s] : s;
+      // Helper: replace substring occurrences (for free-text notes)
+      const swapSubstr = (s) => {
+        if (!s || typeof s !== 'string') return s;
+        let out = s;
+        oldNames.forEach(o => { out = out.split(o).join(nameMap[o]); });
+        return out;
+      };
+
+      let touched = false;
+
+      // SCRs — snapshot name fields
+      const scrs = this._get('scr_requests') || [];
+      scrs.forEach(s => {
+        ['studyDoneByPrimary','studyDoneBySecondary','receivedBy','coordinatedBy',
+         'projectHeadName','agmItName','cioName','rejectedBy'].forEach(f => {
+          if (s[f] && nameMap[s[f]]) { s[f] = nameMap[s[f]]; touched = true; }
+        });
+        // lastRejection.by may also carry a stored old name
+        if (s.lastRejection && s.lastRejection.by && nameMap[s.lastRejection.by]) {
+          s.lastRejection.by = nameMap[s.lastRejection.by];
+          touched = true;
+        }
+      });
+      if (touched) this._set('scr_requests', scrs);
+
+      // workflow_stages — notes are free-form, may contain "Advanced by ..." etc
+      const wf = this._get('workflow_stages') || [];
+      let wfTouched = false;
+      wf.forEach(w => {
+        const newNotes = swapSubstr(w.notes);
+        if (newNotes !== w.notes) { w.notes = newNotes; wfTouched = true; }
+      });
+      if (wfTouched) this._set('workflow_stages', wf);
+
+      // approvals — approverName snapshots
+      const ap = this._get('approvals') || [];
+      let apTouched = false;
+      ap.forEach(a => {
+        const fixed = swap(a.approverName);
+        if (fixed !== a.approverName) { a.approverName = fixed; apTouched = true; }
+      });
+      if (apTouched) this._set('approvals', ap);
+
+      // audit_log — performedBy
+      const audit = this._get('audit_log') || [];
+      let auditTouched = false;
+      audit.forEach(e => {
+        const fixed = swap(e.performedBy);
+        if (fixed !== e.performedBy) { e.performedBy = fixed; auditTouched = true; }
+        // oldValue / newValue may also contain old names (e.g. when a name field changed)
+        const fv1 = swap(e.oldValue); if (fv1 !== e.oldValue) { e.oldValue = fv1; auditTouched = true; }
+        const fv2 = swap(e.newValue); if (fv2 !== e.newValue) { e.newValue = fv2; auditTouched = true; }
+      });
+      if (auditTouched) this._set('audit_log', audit);
+
+      // development_updates — authorName
+      const devUp = this._get('development_updates') || [];
+      let devTouched = false;
+      devUp.forEach(u => {
+        const fixed = swap(u.authorName);
+        if (fixed !== u.authorName) { u.authorName = fixed; devTouched = true; }
+      });
+      if (devTouched) this._set('development_updates', devUp);
+
+      // notifications — message text may name-drop old staff
+      const notifs = this._get('notifications') || [];
+      let nTouched = false;
+      notifs.forEach(n => {
+        const fixed = swapSubstr(n.message);
+        if (fixed !== n.message) { n.message = fixed; nTouched = true; }
+      });
+      if (nTouched) this._set('notifications', notifs);
+
+      console.log('✅ v9: rewrote old staff names in existing SCR snapshots, workflow notes, approvals, audit log, dev updates, notifications');
+    }
+
+    // v9 → v10: clear the auto-assigned IT Coordinator on departments
+    // (Mr. Arjun M / Mr. Suresh Kumar were placeholders mapped to
+    // Mr. Gokulraj S / Mr. Nantha Kumar S — but they're not the actual
+    // coordinators). Only clears the ones I auto-assigned; preserves
+    // any names admin manually set via Master Data → Departments.
+    if (current < 10) {
+      const autoAssigned = new Set([
+        'Mr. Arjun M', 'Mr. Suresh Kumar',
+        'Mr. Gokulraj S', 'Mr. Nantha Kumar S'
+      ]);
+      const depts = this._get('departments') || [];
+      let touched = false;
+      depts.forEach(d => {
+        if (autoAssigned.has(d.coordinatorName)) {
+          d.coordinatorName  = '';
+          d.coordinatorEmail = '';
+          touched = true;
+        }
+      });
+      if (touched) {
+        this._set('departments', depts);
+        console.log('✅ v10: cleared auto-assigned IT Coordinator on departments — set per-dept manually via Master Data');
+      }
+    }
+
+    // v10 → v11: grant the new "hold" action to roles that act on
+    // the SCR (impl team / project head / AGM-IT / CIO). Admin already
+    // had it. Idempotent — only adds when missing, preserves any custom
+    // edits made via Master Data → User Rights.
+    if (current < 11) {
+      const perms = this._get('role_permissions');
+      if (perms) {
+        ['cio', 'agm_it', 'project_head', 'implementation'].forEach(role => {
+          if (perms[role] && Array.isArray(perms[role].actions) && !perms[role].actions.includes('hold')) {
+            perms[role].actions.push('hold');
+          }
+        });
+        this._set('role_permissions', perms);
+        console.log('✅ v11: granted "hold" action to impl/PH/AGM/CIO roles');
+      }
+    }
+
     this._set('migration_version', MIGRATION_VERSION);
     console.log('✅ SCR Store migrated to v' + MIGRATION_VERSION);
+  },
+
+  // ── Self-healing: ensure default user accounts exist ────
+  // If admin accidentally deleted a default user, OR a user record
+  // somehow ended up with a blank name, this restores it from the
+  // canonical defaults. Idempotent — only writes when something is
+  // actually missing/broken. Custom users + admin's renames are
+  // preserved untouched.
+  ensureDefaultUsers() {
+    const ITDept = 'Information Technology';
+    const DEFAULT_USERS = [
+      { id: 'user_admin',  name: 'System Admin',         username: 'admin',        password: 'admin123', role: 'admin',          email: 'admin@hospital.in',           department: ITDept },
+      { id: 'user_cio',    name: 'Mr. Biju Velayudhan',  username: 'cio',          password: 'cio123',   role: 'cio',            email: 'biju@hospital.in',            department: ITDept },
+      { id: 'user_agm',    name: 'Mr. S. Saravanakumar', username: 'agm',          password: 'agm123',   role: 'agm_it',         email: 'saravanakumar@hospital.in',   department: ITDept },
+      // Project Head — 2 staff
+      { id: 'user_ph',     name: 'Mr. Panneer Selvan',   username: 'projecthead',  password: 'ph123',    role: 'project_head',   email: 'panneer@hospital.in',         department: ITDept },
+      { id: 'user_ph2',    name: 'Mr. T.V Raam Kumar',   username: 'projecthead2', password: 'ph123',    role: 'project_head',   email: 'raamkumar@hospital.in',       department: ITDept },
+      // Implementation Team — 3 staff
+      { id: 'user_impl',   name: 'Mrs. Saranya P',       username: 'impl',         password: 'impl123',  role: 'implementation', email: 'saranya.p@hospital.in',       department: ITDept },
+      { id: 'user_impl2',  name: 'Mr. Gokulraj S',       username: 'impl2',        password: 'impl123',  role: 'implementation', email: 'gokulraj@hospital.in',        department: ITDept },
+      { id: 'user_impl3',  name: 'Mr. Nantha Kumar S',   username: 'impl3',        password: 'impl123',  role: 'implementation', email: 'nantha@hospital.in',          department: ITDept },
+      // Development Team — 3 staff
+      { id: 'user_dev1',   name: 'Mrs. Saranya R',       username: 'developer',    password: 'dev123',   role: 'developer',      email: 'saranya.r@hospital.in',       department: ITDept },
+      { id: 'user_dev2',   name: 'Mr. Yoganandham S',    username: 'developer2',   password: 'dev123',   role: 'developer',      email: 'yoga@hospital.in',            department: ITDept },
+      { id: 'user_dev3',   name: 'Mr. Chakravarthy',     username: 'developer3',   password: 'dev123',   role: 'developer',      email: 'chakra@hospital.in',          department: ITDept },
+      // Requesters (departmental — kept for legacy)
+      { id: 'user_req1',   name: 'Dr. Ramesh Kumar',     username: 'requester',    password: 'req123',   role: 'requester',      email: 'ramesh@hospital.in',          department: 'Cardiology' },
+      { id: 'user_req2',   name: 'Dr. Priya Sharma',     username: 'requester2',   password: 'req123',   role: 'requester',      email: 'priya@hospital.in',           department: 'Radiology' },
+      { id: 'user_req3',   name: 'Mr. Ganesh Babu',      username: 'requester3',   password: 'req123',   role: 'requester',      email: 'ganesh@hospital.in',          department: 'Pharmacy' }
+    ];
+
+    const existing = this._get('users') || [];
+    const byId = {};
+    existing.forEach(u => { byId[u.id] = u; });
+
+    const restored = [];
+    let touched = false;
+
+    DEFAULT_USERS.forEach(def => {
+      const cur = byId[def.id];
+      if (!cur) {
+        // User completely missing → restore the full default record
+        existing.push({ ...def, createdAt: Utils.nowISO(), updatedAt: Utils.nowISO() });
+        restored.push(`${def.role}: ${def.name} (added back)`);
+        touched = true;
+      } else {
+        // User exists but has empty/missing essential fields → fill them
+        // from defaults WITHOUT overwriting non-empty custom values
+        let fixed = false;
+        ['name', 'username', 'password', 'role', 'email', 'department'].forEach(k => {
+          const val = (cur[k] !== undefined && cur[k] !== null) ? String(cur[k]).trim() : '';
+          if (!val) {
+            cur[k] = def[k];
+            fixed = true;
+          }
+        });
+        if (fixed) {
+          restored.push(`${def.role}: ${cur.name} (fields restored)`);
+          touched = true;
+        }
+      }
+    });
+
+    if (touched) {
+      this._set('users', existing);
+      console.log(`✅ Restored ${restored.length} default user account(s):`);
+      restored.forEach(n => console.log('   • ' + n));
+    }
   },
 
   // ── Self-healing resync of reviewer names on SCRs ────────
@@ -778,10 +1193,28 @@ const Store = {
     }
   },
 
-  // ── Reset all data ──────────────────────────────────────
-  resetAll() {
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('scr_'));
-    keys.forEach(k => localStorage.removeItem(k));
+  // ── Reset all data (admin Settings page) ────────────────
+  // Wipes the SQLite DB on the server, clears the local cache, and
+  // re-runs seed/migrate so the demo state comes back fresh.
+  async resetAll() {
+    const res = await fetch('/api/admin/reset', { method: 'POST' });
+    if (!res.ok) {
+      console.error('Reset failed:', res.status);
+      if (typeof Utils !== 'undefined' && Utils.toast) {
+        Utils.toast('error', 'Reset Failed', 'Server did not accept the reset.');
+      }
+      return;
+    }
+    // Clear cache + meta locally so seed re-runs against empty state
+    this._cache = {};
+    this.COLLECTIONS.forEach(c => { this._cache[c] = []; });
+    this._meta = {};
+    // Re-seed + migrate + heal, then flush to server
+    this.beginBootBatch();
     this.seed();
+    this.migrate();
+    this.ensureDefaultUsers();
+    this.resyncReviewerNames();
+    await this.commitBootBatch();
   }
 };

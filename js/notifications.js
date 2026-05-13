@@ -218,10 +218,13 @@ const Notifications = {
       const mgtUsers = Store.filter('users', u => u.role === 'agm_it' || u.role === 'cio');
       mgtUsers.forEach(u => this.create(u.id, `${scr.scrNumber} requires your approval — ${stageName}`, 'approval', scr.id));
     }
-    // Notify developer when reaching stage 5
+    // Notify BOTH assigned developers when reaching stage 5 (Development).
+    // Same message they previously got at assignment time, so it surfaces
+    // as an actionable item in their notification list.
     if (toStage === 5) {
-      if (scr.assignedDeveloper) this.create(scr.assignedDeveloper, `${scr.scrNumber} approved — ready for development`, 'assignment', scr.id);
-      if (scr.assignedDeveloper2) this.create(scr.assignedDeveloper2, `${scr.scrNumber} approved — ready for development`, 'assignment', scr.id);
+      const msg = `${scr.scrNumber} has been approved by management — ready for development`;
+      if (scr.assignedDeveloper)  this.create(scr.assignedDeveloper,  msg, 'assignment', scr.id);
+      if (scr.assignedDeveloper2) this.create(scr.assignedDeveloper2, msg, 'assignment', scr.id);
     }
     // Notify implementation team when reaching stage 6 (QA)
     if (toStage === 6) {

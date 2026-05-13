@@ -2,7 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(mkdir -p \"C:/Users/it/.claude/projects/d--scr-SCR-APPLICATION-ANTIGRAVITY-SCR-FILES/memory/\")",
-      "Bash(npx --version)"
+      "Bash(npx --version)",
+      "Bash(node -c js/dashboard.js)",
+      "Bash(powershell -Command '[System.IO.File]::ReadAllText\\('\\\\''d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\js\\\\dashboard.js'\\\\''\\) | Select-String -Pattern '\\\\''syntax|Error'\\\\'' -CaseSensitive:$false | Select-Object -First 3')",
+      "Bash(curl -sS http://localhost:3500/js/dashboard.js)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3500/)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File serve.ps1 -Port 5000)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code} from http://localhost:5000/    \\(%{time_total}s\\)\\\\n\" --max-time 4 http://localhost:5000/)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code} from http://10.10.1.26:5000/  \\(%{time_total}s\\)\\\\n\" --max-time 4 http://10.10.1.26:5000/)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Get-NetTCPConnection -LocalPort 3500 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Write-Host '\\\\''Ports 3500 + 5000 cleared.'\\\\''')",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File serve.ps1 -Port 3500)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code} from http://localhost:3500/    \\(%{time_total}s\\)\\\\n\" --max-time 4 http://localhost:3500/)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code} from http://10.10.1.26:3500/  \\(%{time_total}s\\)\\\\n\" --max-time 4 http://10.10.1.26:3500/)",
+      "Bash(powershell -Command \"Get-Content js/store.js | Select-String -Pattern 'Mr\\\\. Arjun M|Mr\\\\. Suresh Kumar|Ms\\\\. Preethi N|Mr\\\\. Kiran Raj|Ms\\\\. Swathi V|Ms\\\\. Deepa S' | Select-Object LineNumber,Line | Format-Table -AutoSize -Wrap | Out-String -Width 200\")",
+      "Bash(npm --version)",
+      "PowerShell(npm.cmd --version)",
+      "PowerShell(Invoke-RestMethod -Uri 'http://localhost:3500/api/admin/health' -Method GET)",
+      "PowerShell(Start-Sleep -Seconds 2; Invoke-RestMethod -Uri 'http://localhost:3500/api/admin/snapshot' | ConvertTo-Json -Compress | Select-String -Pattern '.{1,300}' | ForEach-Object { $_.Line.Substring\\(0, [Math]::Min\\(300, $_.Line.Length\\)\\) })"
     ]
   }
 }

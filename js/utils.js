@@ -200,21 +200,21 @@ const Utils = {
 
   // ── Department list ─────────────────────────────────────
   defaultDepartments: [
-    { id: 'dept_1',  name: 'Cardiology',         hodName: 'Dr. Ramesh Kumar',   hodEmail: 'ramesh@hospital.in',   coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_2',  name: 'Radiology',          hodName: 'Dr. Priya Sharma',   hodEmail: 'priya@hospital.in',    coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_3',  name: 'Neurology',          hodName: 'Dr. Suresh Menon',   hodEmail: 'suresh@hospital.in',   coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_4',  name: 'Orthopedics',        hodName: 'Dr. Kavitha Nair',   hodEmail: 'kavitha@hospital.in',  coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_5',  name: 'Pediatrics',         hodName: 'Dr. Anil Gupta',     hodEmail: 'anil@hospital.in',     coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_6',  name: 'Oncology',           hodName: 'Dr. Lakshmi Iyer',   hodEmail: 'lakshmi@hospital.in',  coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_7',  name: 'Emergency Medicine', hodName: 'Dr. Vikram Singh',   hodEmail: 'vikram@hospital.in',   coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_8',  name: 'General Surgery',    hodName: 'Dr. Meena Patel',    hodEmail: 'meena@hospital.in',    coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_9',  name: 'Ophthalmology',      hodName: 'Dr. Rajesh Verma',   hodEmail: 'rajesh@hospital.in',   coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_10', name: 'Pharmacy',           hodName: 'Mr. Ganesh Babu',    hodEmail: 'ganesh@hospital.in',   coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_11', name: 'Laboratory',         hodName: 'Dr. Saranya M',      hodEmail: 'saranya@hospital.in',  coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_12', name: 'Nursing',            hodName: 'Ms. Anjali Thomas',  hodEmail: 'anjali@hospital.in',   coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_13', name: 'Administration',     hodName: 'Mr. Senthil Raja',   hodEmail: 'senthil@hospital.in',  coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' },
-    { id: 'dept_14', name: 'Finance & Billing',  hodName: 'Mr. Karthik R',      hodEmail: 'karthik@hospital.in',  coordinatorName: 'Mr. Suresh Kumar', coordinatorEmail: 'suresh.k@hospital.in' },
-    { id: 'dept_15', name: 'IT Department',      hodName: 'Mr. Dinesh Kumar',   hodEmail: 'dinesh@hospital.in',   coordinatorName: 'Mr. Arjun M',     coordinatorEmail: 'arjun@hospital.in' }
+    { id: 'dept_1',  name: 'Cardiology',         hodName: 'Dr. Ramesh Kumar',   hodEmail: 'ramesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_2',  name: 'Radiology',          hodName: 'Dr. Priya Sharma',   hodEmail: 'priya@hospital.in',    coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_3',  name: 'Neurology',          hodName: 'Dr. Suresh Menon',   hodEmail: 'suresh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_4',  name: 'Orthopedics',        hodName: 'Dr. Kavitha Nair',   hodEmail: 'kavitha@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_5',  name: 'Pediatrics',         hodName: 'Dr. Anil Gupta',     hodEmail: 'anil@hospital.in',     coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_6',  name: 'Oncology',           hodName: 'Dr. Lakshmi Iyer',   hodEmail: 'lakshmi@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_7',  name: 'Emergency Medicine', hodName: 'Dr. Vikram Singh',   hodEmail: 'vikram@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_8',  name: 'General Surgery',    hodName: 'Dr. Meena Patel',    hodEmail: 'meena@hospital.in',    coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_9',  name: 'Ophthalmology',      hodName: 'Dr. Rajesh Verma',   hodEmail: 'rajesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_10', name: 'Pharmacy',           hodName: 'Mr. Ganesh Babu',    hodEmail: 'ganesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_11', name: 'Laboratory',         hodName: 'Dr. Saranya M',      hodEmail: 'saranya@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_12', name: 'Nursing',            hodName: 'Ms. Anjali Thomas',  hodEmail: 'anjali@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_13', name: 'Administration',     hodName: 'Mr. Senthil Raja',   hodEmail: 'senthil@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_14', name: 'Finance & Billing',  hodName: 'Mr. Karthik R',      hodEmail: 'karthik@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_15', name: 'Information Technology', hodName: 'Mr. Panneer Selvan', hodEmail: 'panneer@hospital.in', coordinatorName: 'Mr. Gokulraj S', coordinatorEmail: 'gokulraj@hospital.in' }
   ],
 
   // ── Toast helper (capped to 4 visible to avoid spam) ────

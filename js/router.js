@@ -234,10 +234,9 @@ const Router = {
 
   async handleReset() {
     const confirmed = await Utils.confirm('Reset Data?', 'All data will be reset to demo defaults. This cannot be undone.', 'danger');
-    if (confirmed) {
-      Store.resetAll();
-      Utils.toast('success', 'Data Reset', 'All data has been reset to defaults.');
-      Router.navigate('dashboard');
-    }
+    if (!confirmed) return;
+    await Store.resetAll();
+    Utils.toast('success', 'Data Reset', 'All data has been reset to defaults.');
+    Router.navigate('dashboard');
   }
 };

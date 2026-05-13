@@ -29,10 +29,14 @@ const Dashboard = {
     });
     const topDepts = Object.entries(deptStats).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
-    // Developer workload
+    // Developer workload — counts SCRs where the dev is assigned EITHER as
+    // primary OR secondary (so paired devs both show their full load)
     const devs = Store.filter('users', u => u.role === 'developer');
     const devWorkload = devs.map(d => {
-      const count = scrs.filter(s => s.assignedDeveloper === d.id && s.status !== 'Closed' && s.status !== 'Rejected').length;
+      const count = scrs.filter(s =>
+        (s.assignedDeveloper === d.id || s.assignedDeveloper2 === d.id) &&
+        s.status !== 'Closed' && s.status !== 'Rejected'
+      ).length;
       return { ...d, activeCount: count };
     }).sort((a, b) => b.activeCount - a.activeCount);
 

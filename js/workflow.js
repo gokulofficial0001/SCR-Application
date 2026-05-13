@@ -17,11 +17,21 @@ const Workflow = {
   // Stage 4 is managed by approval.js; reject from stages 3/4 goes to 2; stage 6 reject goes to 5
   _rejectTarget: { 2: null, 3: 2, 4: 2, 6: 5 }, // null = terminal rejection
 
+  // ── Roles that can place an SCR on Hold at each stage ───
+  // Mirrors the action roles for that stage (anyone who can act on
+  // it can also pause it). Admin always allowed via canPerformAction.
+  holdRoles: {
+    2: ['implementation'],
+    3: ['project_head'],
+    4: ['agm_it', 'cio']
+  },
+
   // ── Check if user can advance stage ─────────────────────
   canAdvance(scr) {
     const user = Auth.currentUser();
     if (!user) return false;
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (scr.status === 'On Hold') return false;  // must be resumed first
     if (scr.currentStage >= 6) return false; // stage 6 close handled separately
     if (scr.currentStage === 4) return false; // stage 4 managed by approvals
 
@@ -35,6 +45,7 @@ const Workflow = {
     if (!user) return false;
     if (scr.currentStage !== 6) return false;
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (scr.status === 'On Hold') return false;
     const rule = this.stageRules[6];
     return rule.advanceRoles.includes(user.role);
   },
@@ -44,10 +55,35 @@ const Workflow = {
     const user = Auth.currentUser();
     if (!user) return false;
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (scr.status === 'On Hold') return false;  // must be resumed first
 
     const rule = this.stageRules[scr.currentStage];
     if (!rule || rule.rejectRoles.length === 0) return false;
     return rule.rejectRoles.includes(user.role);
+  },
+
+  // ── Check if user can place SCR on Hold ─────────────────
+  // Allowed at the action stages (2, 3, 4) for the role that owns
+  // that stage, plus admin. Already-held / closed / rejected blocked.
+  canHold(scr) {
+    const user = Auth.currentUser();
+    if (!user) return false;
+    if (scr.status === 'Closed' || scr.status === 'Rejected' || scr.status === 'On Hold') return false;
+    if (!Auth.canPerformAction('hold')) return false;
+    const allowedRoles = this.holdRoles[scr.currentStage] || [];
+    return user.role === 'admin' || allowedRoles.includes(user.role);
+  },
+
+  // ── Check if user can resume a held SCR ─────────────────
+  // Same roles that could have held it (so PH can resume what PH held,
+  // etc.) plus admin override.
+  canResume(scr) {
+    const user = Auth.currentUser();
+    if (!user) return false;
+    if (scr.status !== 'On Hold') return false;
+    if (!Auth.canPerformAction('hold')) return false;
+    const allowedRoles = this.holdRoles[scr.currentStage] || [];
+    return user.role === 'admin' || allowedRoles.includes(user.role);
   },
 
   // ── Validate required fields before advancing ────────────
@@ -64,6 +100,14 @@ const Workflow = {
     const scr = Store.getById('scr_requests', scrId);
     if (!scr) return { success: false, error: 'SCR not found' };
     if (!this.canAdvance(scr)) return { success: false, error: 'You do not have permission to advance this stage' };
+
+    // Workflow gates — defense in depth alongside the UI gating
+    if (scr.currentStage === 3 && !scr.phAcceptedBy) {
+      return { success: false, error: 'Project Head must Accept for Review before advancing to Management Approval.' };
+    }
+    if (scr.currentStage === 5 && !scr.acknowledgedBy) {
+      return { success: false, error: 'Developer must Acknowledge the assignment before submitting to QA.' };
+    }
 
     const validation = this.validateStage(scr);
     if (!validation.valid) return { success: false, error: `Missing required fields: ${validation.missing.join(', ')}` };
@@ -120,9 +164,9 @@ const Workflow = {
     Audit.log('SCR', scrId, 'Ticket Closed', 'status', 'In Progress', 'Closed', user.name, user.role);
 
     Notifications.create(scr.createdBy, `Your SCR ${scr.scrNumber} has been verified and closed`, 'status', scrId);
-    if (scr.assignedDeveloper) {
-      Notifications.create(scr.assignedDeveloper, `${scr.scrNumber} has been verified and closed by QA`, 'status', scrId);
-    }
+    const closeMsg = `${scr.scrNumber} has been verified and closed by QA`;
+    if (scr.assignedDeveloper)  Notifications.create(scr.assignedDeveloper,  closeMsg, 'status', scrId);
+    if (scr.assignedDeveloper2) Notifications.create(scr.assignedDeveloper2, closeMsg, 'status', scrId);
     Notifications.updateBadge();
 
     return { success: true };
@@ -187,6 +231,109 @@ const Workflow = {
     return { success: true, targetStage, terminal: false };
   },
 
+  // ── Place SCR on Hold (preserves stage; freezes status) ─
+  // Requires a non-empty reason. The SCR stays at its current stage
+  // but advance/reject/approve are blocked until someone resumes it.
+  holdStage(scrId, reason = '') {
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) return { success: false, error: 'SCR not found' };
+    if (!this.canHold(scr)) return { success: false, error: 'You cannot place this SCR on hold at the current stage' };
+    if (!reason.trim()) return { success: false, error: 'A reason is required to place the SCR on hold' };
+
+    const user = Auth.currentUser();
+    const heldAt = Utils.nowISO();
+
+    Store.update('scr_requests', scrId, {
+      status: 'On Hold',
+      holdReason: reason.trim(),
+      heldBy: user.id,
+      heldAt,
+      holdAtStage: scr.currentStage,
+      lastHold: {
+        stage: scr.currentStage,
+        stageName: Utils.getStageName(scr.currentStage),
+        reason: reason.trim(),
+        by: user.name,
+        byId: user.id,
+        byRole: user.role,
+        at: heldAt
+      }
+    });
+
+    // Append a workflow note (do NOT exit the active stage — just record the hold)
+    Store.add('workflow_stages', {
+      scrId,
+      stage: scr.currentStage,
+      enteredAt: heldAt,
+      exitedAt: heldAt,
+      performedBy: user.id,
+      exitedBy: user.id,
+      action: 'On Hold',
+      notes: `Placed on hold by ${user.name} (${Utils.getRoleLabel(user.role)}): ${reason.trim()}`
+    });
+
+    Audit.log('SCR', scrId, 'Placed On Hold', 'status', 'In Progress', 'On Hold', user.name, user.role);
+
+    // Notify creator + everyone whose action is now blocked at this stage
+    Notifications.create(scr.createdBy, `${scr.scrNumber} placed on hold by ${user.name}: ${reason.trim()}`, 'status', scrId);
+    const stageRoles = this.holdRoles[scr.currentStage] || [];
+    stageRoles.forEach(role => {
+      Store.filter('users', u => u.role === role).forEach(u => {
+        if (u.id !== user.id) {
+          Notifications.create(u.id, `${scr.scrNumber} on hold at ${Utils.getStageName(scr.currentStage)} — awaiting resume`, 'status', scrId);
+        }
+      });
+    });
+    Notifications.updateBadge();
+
+    return { success: true };
+  },
+
+  // ── Resume a held SCR (back to In Progress at same stage) ─
+  resumeStage(scrId, note = '') {
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) return { success: false, error: 'SCR not found' };
+    if (!this.canResume(scr)) return { success: false, error: 'You cannot resume this SCR' };
+
+    const user = Auth.currentUser();
+
+    Store.update('scr_requests', scrId, {
+      status: 'In Progress',
+      // Clear active hold fields — keep lastHold for history
+      holdReason: '',
+      heldBy: '',
+      heldAt: null,
+      holdAtStage: null
+    });
+
+    Store.add('workflow_stages', {
+      scrId,
+      stage: scr.currentStage,
+      enteredAt: Utils.nowISO(),
+      exitedAt: Utils.nowISO(),
+      performedBy: user.id,
+      exitedBy: user.id,
+      action: 'Resumed',
+      notes: note.trim() ? `Resumed by ${user.name}: ${note.trim()}` : `Resumed by ${user.name}`
+    });
+
+    Audit.log('SCR', scrId, 'Resumed', 'status', 'On Hold', 'In Progress', user.name, user.role);
+
+    // Notify creator + the stage's owners that work can continue
+    Notifications.create(scr.createdBy, `${scr.scrNumber} resumed — review continuing`, 'status', scrId);
+    const stageRoles = this.holdRoles[scr.currentStage] || [];
+    stageRoles.forEach(role => {
+      Store.filter('users', u => u.role === role).forEach(u => {
+        if (u.id !== user.id) {
+          Notifications.create(u.id, `${scr.scrNumber} resumed by ${user.name} — ready for action at ${Utils.getStageName(scr.currentStage)}`, 'status', scrId);
+        }
+      });
+    });
+    Notifications.updateBadge();
+
+    return { success: true };
+  },
+
   // ── Internal: move SCR to a given stage ─────────────────
   _moveToStage(scrId, fromStage, toStage, user, notes, status, isRejection = false) {
     const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
@@ -206,7 +353,21 @@ const Workflow = {
       notes
     });
 
-    Store.update('scr_requests', scrId, { currentStage: toStage, status });
+    // Build the SCR update payload
+    const scrPatch = { currentStage: toStage, status };
+
+    // Clear PH "Accept for Review" when SCR is sent backward to Stage ≤ 2
+    // so a fresh acceptance is required if the SCR returns to Stage 3 again.
+    if (toStage < 3) {
+      scrPatch.phAcceptedBy = '';
+      scrPatch.phAcceptedAt = null;
+    }
+
+    Store.update('scr_requests', scrId, scrPatch);
+
+    if (toStage < 3) {
+      Audit.log('SCR', scrId, 'Auto-cleared', 'phAcceptedBy', 'set', '(cleared on backward move)');
+    }
   },
 
   // ── Look up the ACTUAL reviewer's current name ───────────
@@ -226,7 +387,7 @@ const Workflow = {
         const u = Store.getById('users', advancerId);
         if (u && u.role === 'project_head') return u.name;
       }
-      return scr.projectHeadName || 'Ms. Deepa S';
+      return scr.projectHeadName || 'Mr. Panneer Selvan';
     }
 
     if (role === 'agm_it' || role === 'cio') {

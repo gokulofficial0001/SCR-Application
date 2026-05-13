@@ -64,10 +64,10 @@ const Feedback = {
 
     Audit.log('SCR', scrId, 'Feedback Submitted', 'avgScore', null, avg.toFixed(1));
 
-    // Notify developer
-    if (scr.assignedDeveloper) {
-      Notifications.create(scr.assignedDeveloper, `Feedback received for ${scr.scrNumber}: ${avg.toFixed(1)}/5`, 'feedback', scrId);
-    }
+    // Notify both assigned developers
+    const msg = `Feedback received for ${scr.scrNumber}: ${avg.toFixed(1)}/5`;
+    if (scr.assignedDeveloper)  Notifications.create(scr.assignedDeveloper,  msg, 'feedback', scrId);
+    if (scr.assignedDeveloper2) Notifications.create(scr.assignedDeveloper2, msg, 'feedback', scrId);
 
     return { success: true, feedback: fb };
   },

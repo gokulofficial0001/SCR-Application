@@ -318,7 +318,7 @@ const SelfService = {
             <!-- Section 3: Request Description -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">2</span>
+                <span class="scr-section-num">3</span>
                 <span>Request Description</span>
               </div>
               <div class="scr-form-section-body">
@@ -333,10 +333,10 @@ const SelfService = {
               </div>
             </div>
 
-            <!-- Section 3: Reason for Change -->
+            <!-- Section 4: Reason for Change -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">3</span>
+                <span class="scr-section-num">4</span>
                 <span>Reason for Change</span>
               </div>
               <div class="scr-form-section-body">
@@ -351,10 +351,10 @@ const SelfService = {
             <input type="hidden" id="quick-received-by" value="">
             <input type="hidden" id="quick-coordinated-by" value="">
 
-            <!-- Section 4: End User Details -->
+            <!-- Section 5: End User Details -->
             <div class="scr-form-section">
               <div class="scr-form-section-title">
-                <span class="scr-section-num">4</span>
+                <span class="scr-section-num">5</span>
                 <span>End User Details</span>
               </div>
               <div class="scr-form-section-body">

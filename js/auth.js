@@ -11,19 +11,19 @@ const Auth = {
     },
     cio: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['approve', 'reject', 'view_audit']
+      actions: ['approve', 'reject', 'hold', 'view_audit']
     },
     agm_it: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'approvals', 'feedback', 'audit', 'notifications'],
-      actions: ['approve', 'reject', 'view_audit']
+      actions: ['approve', 'reject', 'hold', 'view_audit']
     },
     project_head: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'feedback', 'audit', 'notifications'],
-      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'view_audit']
+      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'hold', 'view_audit']
     },
     implementation: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'scr-create', 'feedback', 'audit', 'notifications'],
-      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'close_ticket', 'view_audit']
+      actions: ['create_scr', 'edit_scr', 'assign_scr', 'advance_stage', 'reject', 'hold', 'close_ticket', 'view_audit']
     },
     developer: {
       pages: ['dashboard', 'scr-list', 'scr-detail', 'feedback', 'notifications'],

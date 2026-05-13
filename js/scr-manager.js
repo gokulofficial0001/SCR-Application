@@ -80,7 +80,7 @@ const SCRManager = {
       // Section 8 — defaults to standard hospital approvers
       approvalStatus: data.approvalStatus || '',
       approvalReason: data.approvalReason || '',
-      projectHeadName: data.projectHeadName || 'Ms. Deepa S',
+      projectHeadName: data.projectHeadName || 'Mr. Panneer Selvan',
       agmItName: data.agmItName || 'Mr. S. Saravanakumar',
       cioName: data.cioName || 'Mr. Biju Velayudhan',
       // Section 9
@@ -131,6 +131,19 @@ const SCRManager = {
       return { success: false, error: 'Study Date To must be on or after Study Date From' };
     }
 
+    // Acknowledgement is held by ONE specific user (the one who clicked
+    // Acknowledge). If THAT user is no longer in the assigned pair, the
+    // ack no longer applies — clear it so the new dev must acknowledge.
+    const nextPrimary   = updates.assignedDeveloper  !== undefined ? updates.assignedDeveloper  : old.assignedDeveloper;
+    const nextSecondary = updates.assignedDeveloper2 !== undefined ? updates.assignedDeveloper2 : old.assignedDeveloper2;
+    const ackByStillAssigned = old.acknowledgedBy &&
+                               (old.acknowledgedBy === nextPrimary || old.acknowledgedBy === nextSecondary);
+    if (old.acknowledgedBy && !ackByStillAssigned) {
+      updates.acknowledgedBy = '';
+      updates.acknowledgedAt = null;
+      Audit.log('SCR', id, 'Auto-cleared', 'acknowledgedBy', 'set', '(cleared because acknowledging developer was unassigned)');
+    }
+
     const scr = Store.update('scr_requests', id, updates);
 
     // Track field changes (skip timestamps, deep-nested fields)
@@ -141,8 +154,11 @@ const SCRManager = {
       }
     });
 
-    // If developer assigned, notify
-    if (updates.assignedDeveloper && updates.assignedDeveloper !== old.assignedDeveloper) {
+    // If either developer changed (added, replaced, or removed), notify.
+    // notifySCRAssigned() itself sends to BOTH currently-assigned devs.
+    const primaryChanged   = updates.assignedDeveloper  !== undefined && updates.assignedDeveloper  !== old.assignedDeveloper;
+    const secondaryChanged = updates.assignedDeveloper2 !== undefined && updates.assignedDeveloper2 !== old.assignedDeveloper2;
+    if (primaryChanged || secondaryChanged) {
       Notifications.notifySCRAssigned(scr);
     }
 
@@ -365,13 +381,21 @@ const SCRManager = {
     const dev2 = scr.assignedDeveloper2 ? Store.getById('users', scr.assignedDeveloper2) : null;
     const creator = Store.getById('users', scr.createdBy);
     const canEdit = Auth.canPerformAction('edit_scr') && scr.status !== 'Closed' && scr.status !== 'Rejected';
-    const canAdvance = Workflow.canAdvance(scr);
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isImpl = Auth.hasRole('implementation', 'admin');
+    const isPH = Auth.hasRole('project_head', 'admin');
     const isAssignedDev = Auth.hasRole('developer', 'admin') &&
       (scr.assignedDeveloper === currentUser.id || scr.assignedDeveloper2 === currentUser.id);
     const canAcknowledge = isAssignedDev && scr.currentStage === 5 && !scr.acknowledgedBy && scr.status !== 'Closed';
+
+    // Project Head must "Accept for Review" before they can advance Stage 3.
+    // Developer must "Acknowledge" before they can advance Stage 5 (Submit to QA).
+    // Both gates ensure explicit ownership of the work before the transition.
+    const canPhAccept = isPH && scr.currentStage === 3 && !scr.phAcceptedBy && scr.status !== 'Closed' && scr.status !== 'Rejected';
+    const canAdvance = Workflow.canAdvance(scr)
+      && (scr.currentStage !== 3 || !!scr.phAcceptedBy)
+      && (scr.currentStage !== 5 || !!scr.acknowledgedBy);
 
     return `
       <div class="page-header">
@@ -386,9 +410,12 @@ const SCRManager = {
         </div>
         <div class="flex gap-2">
           ${canEdit ? `<button class="btn btn-ghost" onclick="Router.navigate('scr-create',{id:'${scr.id}'})">✏️ Edit</button>` : ''}
-          ${scr.status === 'Closed' ? `<button class="btn btn-ghost" onclick="SCRManager.printSCR('${scr.id}')" title="Print SCR Form">🖨️ Print</button>` : ''}
+          ${scr.status === 'Closed' || Auth.hasRole('admin') ? `<button class="btn btn-ghost" onclick="SCRManager.printSCR('${scr.id}')" title="${scr.status === 'Closed' ? 'Print SCR Form' : 'Admin: Print SCR Form at current stage'}">🖨️ Print</button>` : ''}
+          ${canPhAccept ? `<button class="btn btn-warning" onclick="SCRManager.handlePhAccept('${scr.id}')">👁 Accept for Review</button>` : ''}
           ${canAcknowledge ? `<button class="btn btn-warning" onclick="SCRManager.handleAcknowledge('${scr.id}')">👁 Acknowledge</button>` : ''}
           ${Workflow.canReject(scr) ? `<button class="btn btn-danger btn-sm" onclick="SCRManager.handleRejectStage('${scr.id}')">✕ Reject</button>` : ''}
+          ${Workflow.canHold(scr) ? `<button class="btn btn-warning btn-sm" onclick="SCRManager.handleHoldStage('${scr.id}')" title="Pause this SCR — work cannot continue until resumed">⏸ Hold</button>` : ''}
+          ${Workflow.canResume(scr) ? `<button class="btn btn-success btn-sm" onclick="SCRManager.handleResumeStage('${scr.id}')" title="Lift the hold and continue review">▶ Resume</button>` : ''}
           ${Workflow.canClose(scr) ? `<button class="btn btn-success" onclick="SCRManager.handleCloseTicket('${scr.id}')">✓ Close Ticket</button>` : ''}
           ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">${Workflow.getAdvanceLabel(scr.currentStage)}</button>` : ''}
         </div>
@@ -399,6 +426,21 @@ const SCRManager = {
         ${Workflow.renderPipeline(scr)}
         ${SLAEngine.renderProgressBar(scr)}
       </div>
+
+      ${scr.status === 'On Hold' && scr.holdReason ? `
+      <!-- Hold banner — currently on hold, requires resume before action -->
+      <div class="card mb-4" style="border-left:4px solid var(--color-warning);background:rgba(245,158,11,0.06)">
+        <div class="card-body">
+          <div class="flex items-center" style="gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-2)">
+            <span style="font-size:1.5rem">⏸</span>
+            <span class="font-bold" style="color:var(--color-warning-dark);font-size:var(--font-md)">On Hold at ${Utils.escapeHtml(Utils.getStageName(scr.holdAtStage || scr.currentStage))}</span>
+            ${Utils.badgeHtml('Paused', 'warning')}
+          </div>
+          <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;margin-bottom:var(--space-2);white-space:pre-wrap">"${Utils.escapeHtml(scr.holdReason)}"</p>
+          <p class="text-xs text-tertiary">— ${Utils.escapeHtml(Store.getById('users', scr.heldBy)?.name || 'Unknown')} · ${Utils.formatDateTime(scr.heldAt)}</p>
+        </div>
+      </div>
+      ` : ''}
 
       ${scr.lastRejection ? `
       <!-- Rejection banner — visible on every screen that shows this SCR -->
@@ -411,6 +453,23 @@ const SCRManager = {
           </div>
           <p class="text-sm" style="color:var(--color-text-primary);line-height:1.7;margin-bottom:var(--space-2);white-space:pre-wrap">"${Utils.escapeHtml(scr.lastRejection.remarks || '')}"</p>
           <p class="text-xs text-tertiary">— ${Utils.escapeHtml(scr.lastRejection.by || 'Unknown')} (${Utils.escapeHtml(Utils.getRoleLabel(scr.lastRejection.byRole || ''))}) · ${Utils.formatDateTime(scr.lastRejection.at)}</p>
+        </div>
+      </div>
+      ` : ''}
+
+      ${scr.currentStage === 3 || scr.phAcceptedBy ? `
+      <!-- PH Acceptance status banner — visible at stage 3+ -->
+      <div class="card mb-4" style="border-left:4px solid ${scr.phAcceptedBy ? 'var(--color-success)' : 'var(--color-warning)'};background:${scr.phAcceptedBy ? 'rgba(13,122,90,0.05)' : 'rgba(245,158,11,0.06)'}">
+        <div class="card-body" style="padding:var(--space-3) var(--space-4)">
+          <div class="flex items-center" style="gap:var(--space-3);flex-wrap:wrap">
+            <span style="font-size:1.3rem">${scr.phAcceptedBy ? '👁' : '⏳'}</span>
+            <span class="font-bold" style="color:${scr.phAcceptedBy ? 'var(--color-success-dark)' : 'var(--color-warning-dark)'};font-size:var(--font-base)">
+              ${scr.phAcceptedBy ? 'Project Head Review — Accepted' : 'Awaiting Project Head Acceptance'}
+            </span>
+            ${scr.phAcceptedBy
+              ? `<span class="text-sm text-secondary">by ${Utils.escapeHtml(Store.getById('users', scr.phAcceptedBy)?.name || '—')} · ${Utils.formatDateTime(scr.phAcceptedAt)}</span>`
+              : `<span class="text-sm text-tertiary">— PH must accept before review work can begin</span>`}
+          </div>
         </div>
       </div>
       ` : ''}
@@ -649,6 +708,15 @@ const SCRManager = {
                   <span class="detail-label">CIO</span>
                   <span class="detail-value">${Utils.escapeHtml(Workflow.actualReviewerName(scr, 'cio'))}</span>
                 </div>
+                ${scr.currentStage >= 3 || scr.phAcceptedBy ? `
+                <div class="detail-field" style="grid-column:span 2">
+                  <span class="detail-label">PH Review Acceptance</span>
+                  <span class="detail-value">
+                    ${scr.phAcceptedBy
+                      ? `${Utils.badgeHtml('Accepted', 'success')} &nbsp;${Utils.escapeHtml(Store.getById('users', scr.phAcceptedBy)?.name || '—')} &nbsp;·&nbsp; ${Utils.formatDate(scr.phAcceptedAt)}`
+                      : `${Utils.badgeHtml('Pending', 'warning')} &nbsp;<span class="text-tertiary text-sm">Awaiting Project Head acceptance</span>`}
+                  </span>
+                </div>` : ''}
               </div>
               ${Approval.renderForSCR(scr.id)}
             </div>
@@ -763,6 +831,130 @@ const SCRManager = {
         Utils.toast('error', 'Error', result.error);
       }
     };
+  },
+
+  // ── Handle Hold (pause SCR until someone resumes it) ───
+  async handleHoldStage(scrId) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal modal-sm">
+        <div class="modal-body" style="padding:var(--space-6)">
+          <h4 style="margin-bottom:var(--space-2)">⏸ Place SCR On Hold</h4>
+          <p class="text-secondary text-sm mb-4">The SCR will pause at the current stage. No advance / reject / approval can happen until someone resumes it. A reason is required.</p>
+          <div class="form-group">
+            <label class="form-label">Reason for Hold <span class="required">*</span></label>
+            <textarea id="hold-reason" class="form-textarea" rows="3" placeholder="e.g. Awaiting clarification from requester / vendor dependency / budget approval pending..."></textarea>
+          </div>
+          <div class="flex gap-3 justify-end mt-4">
+            <button class="btn btn-ghost" id="hold-cancel">Cancel</button>
+            <button class="btn btn-warning" id="hold-confirm">Confirm Hold</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => document.getElementById('hold-reason')?.focus(), 50);
+
+    overlay.querySelector('#hold-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#hold-confirm').onclick = () => {
+      const reason = document.getElementById('hold-reason').value.trim();
+      if (!reason) { Utils.toast('warning', 'Reason Required', 'Please explain why this SCR is being held.'); return; }
+      overlay.remove();
+      const result = Workflow.holdStage(scrId, reason);
+      if (result.success) {
+        Utils.toast('warning', 'On Hold', 'SCR has been placed on hold');
+        Router.navigate('scr-detail', { id: scrId });
+      } else {
+        Utils.toast('error', 'Error', result.error);
+      }
+    };
+  },
+
+  // ── Handle Resume (lift the hold) ───────────────────────
+  async handleResumeStage(scrId) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal modal-sm">
+        <div class="modal-body" style="padding:var(--space-6)">
+          <h4 style="margin-bottom:var(--space-2)">▶ Resume SCR</h4>
+          <p class="text-secondary text-sm mb-4">Lift the hold and continue review at the current stage. A note is optional.</p>
+          <div class="form-group">
+            <label class="form-label">Resume Note (optional)</label>
+            <textarea id="resume-note" class="form-textarea" rows="2" placeholder="e.g. Clarification received / dependency resolved..."></textarea>
+          </div>
+          <div class="flex gap-3 justify-end mt-4">
+            <button class="btn btn-ghost" id="resume-cancel">Cancel</button>
+            <button class="btn btn-success" id="resume-confirm">Confirm Resume</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => document.getElementById('resume-note')?.focus(), 50);
+
+    overlay.querySelector('#resume-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#resume-confirm').onclick = () => {
+      const note = document.getElementById('resume-note').value.trim();
+      overlay.remove();
+      const result = Workflow.resumeStage(scrId, note);
+      if (result.success) {
+        Utils.toast('success', 'Resumed', 'SCR is back in progress');
+        Router.navigate('scr-detail', { id: scrId });
+      } else {
+        Utils.toast('error', 'Error', result.error);
+      }
+    };
+  },
+
+  // ── Handle Project Head "Accept for Review" (Stage 3) ──
+  async handlePhAccept(scrId) {
+    const confirmed = await Utils.confirm(
+      'Accept for Review?',
+      'Confirm that you will review this SCR, assign a developer, and forward to Management Approval.',
+      'primary'
+    );
+    if (!confirmed) return;
+
+    const user = Auth.currentUser();
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) { Utils.toast('error', 'Not Found', 'SCR no longer exists'); return; }
+
+    // Defensive guards
+    if (scr.currentStage !== 3) {
+      Utils.toast('error', 'Wrong Stage', 'This SCR is not at Project Head Review.');
+      return;
+    }
+    if (scr.phAcceptedBy) {
+      Utils.toast('warning', 'Already Accepted', 'This SCR has already been accepted for review.');
+      return;
+    }
+
+    Store.update('scr_requests', scrId, {
+      phAcceptedBy: user.id,
+      phAcceptedAt: Utils.nowISO(),
+      // Also stamp PH name now (so Management Approval header shows the
+      // actual PH who took it, even before they advance)
+      projectHeadName: user.name
+    });
+
+    Audit.log('SCR', scrId, 'PH Accepted for Review', 'phAcceptedBy', null, user.name, user.name, user.role);
+
+    // Notify implementation team that PH has picked it up
+    const impl = Store.filter('users', u => u.role === 'implementation');
+    impl.forEach(u => {
+      Notifications.create(
+        u.id,
+        `${scr.scrNumber} accepted by Project Head ${user.name} — review in progress`,
+        'status',
+        scrId
+      );
+    });
+
+    Utils.toast('success', 'Accepted for Review',
+      'You can now assign a developer and advance to Management Approval.');
+    Router.navigate('scr-detail', { id: scrId });
   },
 
   // ── Handle developer acknowledgement ───────────────────
@@ -1040,18 +1232,18 @@ const SCRManager = {
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Assigned On</label>
-                <input type="date" class="form-input" id="scr-assigned-on" value="${scr.assignedOn || ''}">
-              </div>
-              <div class="form-group">
                 <label class="form-label">Study Date From</label>
                 <input type="date" class="form-input" id="scr-study-from" value="${scr.studyDateFrom || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Date To</label>
+                <input type="date" class="form-input" id="scr-study-to" value="${scr.studyDateTo || ''}">
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Study Date To</label>
-                <input type="date" class="form-input" id="scr-study-to" value="${scr.studyDateTo || ''}">
+                <label class="form-label">Assigned On</label>
+                <input type="date" class="form-input" id="scr-assigned-on" value="${scr.assignedOn || ''}">
               </div>
               <div class="form-group">
                 <label class="form-label">Schedule Date</label>
@@ -1163,7 +1355,7 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Project Head Name</label>
-                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Ms. Deepa S')}" placeholder="Project Head full name">
+                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Mr. Panneer Selvan')}" placeholder="Project Head full name">
               </div>
               <div class="form-group">
                 <label class="form-label">AGM – IT Name</label>
@@ -1459,335 +1651,385 @@ const SCRManager = {
     const agmDecision = approvals.find(a => a.approverRole === 'agm_it');
     const cioDecision = approvals.find(a => a.approverRole === 'cio');
 
-    const isApproved  = agmDecision?.decision === 'Approved' && cioDecision?.decision === 'Approved';
-    const isRejected  = agmDecision?.decision === 'Rejected' || cioDecision?.decision === 'Rejected';
-    const chkApproved = isApproved  ? 'checked' : '';
-    const chkRejected = isRejected  ? 'checked' : '';
-    const chkHold     = (!isApproved && !isRejected && (agmDecision || cioDecision)) ? 'checked' : '';
+    // Approval state — only one of these ticks. Two signals can set it:
+    //   (a) workflow approvals table (AGM + CIO clicked Approve/Reject) — Stage 4 flow
+    //   (b) scr.approvalStatus set directly via the SCR form (admin override / pre-workflow data)
+    // If both exist, the direct status wins (admin's explicit choice).
+    const directStatus = scr.approvalStatus || '';
+    const isApproved =
+      directStatus === 'Approved' ||
+      (directStatus === '' && agmDecision?.decision === 'Approved' && cioDecision?.decision === 'Approved');
+    const isRejected =
+      directStatus === 'Not Approved' ||
+      (directStatus === '' && (agmDecision?.decision === 'Rejected' || cioDecision?.decision === 'Rejected'));
+    const isHold =
+      !isApproved && !isRejected && (
+        directStatus === 'Hold' ||
+        agmDecision?.decision === 'Hold' ||
+        cioDecision?.decision === 'Hold' ||
+        scr.status === 'On Hold'
+      );
 
-    const esc  = (v) => (v || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') || '—';
-    const fmt  = (d) => d ? Utils.formatDate(d) : '—';
-    const dash = (v) => v || '—';
+    const esc = (v) => (v || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const fmt = (d) => d ? Utils.formatDate(d) : '';
+    const naIfEmpty = (v) => (v && String(v).trim()) ? v : 'NA';
 
-    // Build 6 attachment slots
-    const attSlots = Array.from({ length: 6 }, (_, i) => {
-      const a = scr.attachments && scr.attachments[i];
-      return `<tr><td class="att-num">${i + 1}.</td><td class="att-val">${a ? esc(a.name) : ''}</td></tr>`;
-    });
+    const approvalReason = scr.approvalReason || scr.remarkProjectHead || agmDecision?.comments || cioDecision?.comments || '';
 
     const htmlContent = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>${esc(scr.scrNumber)} — SCR Form</title>
 <style>
-  @page { size: A4 portrait; margin: 15mm 18mm; }
+  /* Symmetric @page margin = content centred on the sheet */
+  @page { size: A4 portrait; margin: 12mm; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  html, body { width: 100%; margin: 0; padding: 0; }
+
   body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 11px;
+    font-family: 'Calibri', 'Segoe UI', Arial, Helvetica, sans-serif;
+    /* Default font-size = VALUE size. Labels + headers are sized down below. */
+    font-size: 14px;
     color: #000;
     background: #fff;
+    line-height: 1.4;
   }
 
-  /* WATERMARK */
-  body::before {
-    content: 'GKNM HOSPITAL';
-    position: fixed;
-    top: 38%; left: 15%;
-    font-size: 72px;
-    font-weight: bold;
-    color: rgba(0,0,0,0.04);
-    transform: rotate(-35deg);
-    white-space: nowrap;
-    z-index: -1;
-    pointer-events: none;
+  /* Outer wrapper forces horizontal centring even when the browser
+     gives the body extra space (some print previews add edge padding) */
+  .page-wrap {
+    width: 100%;
+    margin: 0 auto;
+    padding: 0;
   }
 
-  /* ── PAGE HEADER ── */
-  .page-header {
+  /* ── TITLE BANNER ── */
+  .title-banner {
+    border: 2px solid #4a6b1e;
     text-align: center;
-    border-bottom: 2px solid #000;
-    padding-bottom: 8px;
-    margin-bottom: 10px;
+    padding: 8px;
+    margin: 0;
   }
-  .hospital-name {
-    font-size: 18px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-  .hospital-sub {
-    font-size: 11px;
-    color: #444;
-    margin-top: 2px;
-  }
-  .form-title {
-    font-size: 13px;
-    font-weight: bold;
-    background: #000;
-    color: #fff;
-    padding: 4px 0;
-    margin-top: 8px;
+  .title-banner h1 {
+    font-size: 26px;
+    font-weight: 800;
     letter-spacing: 0.5px;
+    color: #000;
   }
 
-  /* ── SECTION HEADING ── */
-  .sec-head {
-    font-size: 11px;
-    font-weight: bold;
-    background: #e8e8e8;
-    border: 1px solid #999;
-    border-bottom: none;
-    padding: 4px 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-top: 10px;
-  }
-
-  /* ── FORM TABLE ── */
-  table.form-tbl {
+  /* ── ALL FORM TABLES ── */
+  /* table-layout: fixed + explicit column widths means the columns NEVER
+     re-flow based on content. Long content stays inside its cell. */
+  table.f {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
+    page-break-inside: avoid;   /* don't split any section across pages */
+    /* -1px overlaps the bottom border of this table with the top border
+       of the next, so adjacent sections share a single border line and
+       read as one continuous paper form. */
+    margin-bottom: -1px;
   }
-  table.form-tbl td {
-    border: 1px solid #999;
-    padding: 5px 7px;
-    vertical-align: top;
+  /* The title banner sits flush against the first table */
+  .title-banner + table.f { margin-top: 0; }
+  table.f td {
+    border: 1px solid #444;
+    padding: 5px 10px;
+    vertical-align: middle;
     word-wrap: break-word;
+    overflow: hidden;
   }
-  td.lbl {
-    background: #f5f5f5;
-    font-weight: bold;
-    width: 28%;
-    white-space: nowrap;
-    color: #111;
+
+  /* Force a hard page break — used to push Study Details onto page 2 */
+  .page-break-before {
+    page-break-before: always;
+    break-before: page;
   }
-  td.val {
-    width: 22%;
+
+  /* Section header row (green band running full width) */
+  td.sec {
+    background: #a2c878;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: #000;
+    padding: 5px 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    height: 22px;
   }
-  td.val-wide {
-    /* used when spanning full width */
-  }
-  td.area {
-    min-height: 44px;
-    height: 44px;
+
+  /* Bold label cell with light tint — held at 12px so the bigger value
+     text reads as the primary content */
+  td.lbl   { font-weight: 700; background: #f4f4f4; font-size: 12px; }
+  td.lbl-c { font-weight: 700; background: #f4f4f4; font-size: 12px; text-align: center; }
+
+  /* Centered value cell (names, dates in grid layouts) — inherits 14px */
+  td.val-c { text-align: center; vertical-align: middle; }
+
+  /* ── FIXED-HEIGHT CONTENT CELLS ── */
+  td.area    { padding: 0; vertical-align: top; height: 155px; }
+  td.area-lg { padding: 0; vertical-align: top; height: 155px; }
+  td.area-sm { padding: 0; vertical-align: top; height: 62px;  }
+
+  .clip {
+    padding: 8px 12px;
+    overflow: hidden;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
     line-height: 1.5;
+    box-sizing: border-box;
   }
-  td.area-sm {
-    min-height: 30px;
-    height: 30px;
-    white-space: pre-wrap;
-  }
+  td.area    > .clip { height: 155px; }
+  td.area-lg > .clip { height: 155px; }
+  td.area-sm > .clip { height: 62px;  }
 
-  /* ── ATTACHMENTS ── */
-  table.att-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  table.att-tbl td { border: 1px solid #999; padding: 4px 6px; }
-  td.att-num { width: 24px; font-weight: bold; background: #f5f5f5; text-align: center; }
-  td.att-val { }
+  /* Single-line rows — sized to fill Page 1 fully while keeping End User on it */
+  .row-h-28 td { height: 42px; }
+  .row-h-42 td { height: 58px; }
+  .row-h-48 td { height: 58px; }
 
-  /* ── APPROVAL CHECKBOXES ── */
-  .approval-checks { padding: 6px 0; }
-  .approval-checks label { margin-right: 28px; font-size: 12px; vertical-align: middle; }
-  .approval-checks input[type=checkbox] { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
+  /* Signature cell for the approver names */
+  td.sig { padding: 0; vertical-align: bottom; text-align: center; height: 62px; }
+  td.sig > .sig-inner { height: 62px; padding: 0 6px 8px; box-sizing: border-box; display: flex; align-items: flex-end; justify-content: center; word-wrap: break-word; font-size: 13px; font-weight: 600; }
 
-  /* ── SIGNATURES ── */
-  table.sign-tbl { width: 100%; border-collapse: collapse; margin-top: 16px; }
-  table.sign-tbl td { width: 33.33%; text-align: center; padding: 0 10px; vertical-align: bottom; }
-  .sign-space { height: 48px; }
-  .sign-line { border-top: 1px solid #000; padding-top: 4px; font-size: 10px; font-weight: bold; }
+  /* ── APPROVAL STATUS COLOURED CELLS ── */
+  /* Each status sits in a fixed-colour cell; the empty cell next to it gets a tick when chosen */
+  td.ap-approved   { background: #7fc356; color: #000; text-align: center; font-weight: 700; }
+  td.ap-rejected   { background: #f0a050; color: #000; text-align: center; font-weight: 700; }
+  td.ap-hold       { background: #5a9fd4; color: #000; text-align: center; font-weight: 700; }
+  td.ap-mark { text-align: center; font-weight: 700; font-size: 14px; }
 
-  /* ── REMARKS TABLE ── */
-  table.rem-tbl { width: 100%; border-collapse: collapse; }
-  table.rem-tbl td { border: 1px solid #999; padding: 5px 7px; vertical-align: top; }
-  td.rem-lbl { background: #f5f5f5; font-weight: bold; width: 28%; white-space: nowrap; }
-  td.rem-val { min-height: 30px; height: 30px; }
-
-  /* ── FOOTER ── */
-  .print-footer {
-    margin-top: 14px;
-    border-top: 1px solid #ccc;
-    padding-top: 6px;
-    font-size: 9.5px;
-    color: #555;
-    line-height: 1.6;
+  /* Footer NOTE block */
+  .note-body td { font-size: 11.5px; line-height: 1.55; }
+  .note-body td.note-lbl { font-weight: 700; width: 24%; vertical-align: top; }
+  .quote-row td {
+    text-align: center;
+    font-style: italic;
+    color: #c2185b;
+    padding: 12px;
+    font-size: 13px;
+    background: #fafafa;
   }
 
-  /* ── PAGE BREAK CONTROL ── */
   .no-break { page-break-inside: avoid; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style>
 </head><body>
 
-<!-- PAGE HEADER -->
-<div class="page-header">
-  <div class="hospital-name">GKNM Hospital</div>
-  <div class="hospital-sub">IT Department · Quality &amp; Patient Safety</div>
-  <div class="form-title">SOFTWARE CHANGE REQUEST (SCR) FORM</div>
+<div class="page-wrap">
+
+<!-- TITLE -->
+<div class="title-banner">
+  <h1>SOFTWARE CHANGE REQUEST (SCR) FORM</h1>
 </div>
 
-<!-- HEADER INFO -->
-<div class="no-break">
-<table class="form-tbl">
-  <tr>
+<!-- HEADER ROW: SCR Number + Date -->
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:32%"><col style="width:18%"><col style="width:32%"></colgroup>
+  <tr class="row-h-28">
     <td class="lbl">SCR Number</td>
-    <td class="val">${esc(scr.scrNumber)}</td>
+    <td>${esc(scr.scrNumber)}</td>
     <td class="lbl">Date</td>
-    <td class="val">${fmt(scr.scrDate || scr.createdAt)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Request Type</td>
-    <td class="val">${esc(scr.requestType)}</td>
-    <td class="lbl">Intervention / Priority</td>
-    <td class="val">${esc(scr.intervention || scr.priority)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Module Name</td>
-    <td class="val" colspan="3">${esc(scr.moduleName)}</td>
+    <td>${fmt(scr.scrDate || scr.createdAt)}</td>
   </tr>
 </table>
-</div>
+
+<!-- PROJECT DETAILS -->
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:82%"></colgroup>
+  <tr><td class="sec" colspan="2">PROJECT DETAILS</td></tr>
+  <tr class="row-h-28">
+    <td class="lbl">Request Type</td>
+    <td>${esc(scr.requestType)}</td>
+  </tr>
+  <tr class="row-h-28">
+    <td class="lbl">Intervention</td>
+    <td>${esc(scr.intervention || scr.priority)}</td>
+  </tr>
+</table>
 
 <!-- REQUEST DESCRIPTION -->
-<div class="sec-head">Request Description</div>
-<div class="no-break">
-<table class="form-tbl">
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:82%"></colgroup>
+  <tr><td class="sec" colspan="2">REQUEST DESCRIPTION</td></tr>
+  <tr class="row-h-28">
+    <td class="lbl">Module Name</td>
+    <td>${esc(scr.moduleName)}</td>
+  </tr>
   <tr>
-    <td class="lbl" style="width:28%">Description</td>
-    <td class="val area" colspan="3">${esc(scr.description)}</td>
+    <td colspan="2" class="area"><div class="clip">${esc(scr.description)}</div></td>
   </tr>
 </table>
-</div>
 
 <!-- REASON FOR CHANGE -->
-<div class="sec-head">Reason for Change</div>
-<div class="no-break">
-<table class="form-tbl">
+<table class="f">
+  <tr><td class="sec">REASON FOR CHANGE</td></tr>
   <tr>
-    <td class="lbl">Business Justification</td>
-    <td class="val area" colspan="3">${esc(scr.reasonForChange)}</td>
+    <td class="area-lg"><div class="clip">${esc(scr.reasonForChange)}</div></td>
   </tr>
 </table>
-</div>
 
-<!-- ATTACHMENTS -->
-<div class="sec-head">Attachments</div>
-<div class="no-break">
-<table class="att-tbl">
-  <tr>
-    ${attSlots.slice(0,3).map(s => s.replace('<tr>','').replace('</tr>','')).join('')}
+<!-- ATTACHMENTS — 2x3 grid (1-3 left, 4-6 right) -->
+<table class="f">
+  <colgroup><col style="width:6%"><col style="width:44%"><col style="width:6%"><col style="width:44%"></colgroup>
+  <tr><td class="sec" colspan="4">ATTACHMENTS</td></tr>
+  <tr class="row-h-28">
+    <td class="lbl-c">1.</td>
+    <td>${scr.attachments && scr.attachments[0] ? esc(scr.attachments[0].name) : ''}</td>
+    <td class="lbl-c">4.</td>
+    <td>${scr.attachments && scr.attachments[3] ? esc(scr.attachments[3].name) : ''}</td>
   </tr>
-  <tr>
-    ${attSlots.slice(3,6).map(s => s.replace('<tr>','').replace('</tr>','')).join('')}
+  <tr class="row-h-28">
+    <td class="lbl-c">2.</td>
+    <td>${scr.attachments && scr.attachments[1] ? esc(scr.attachments[1].name) : ''}</td>
+    <td class="lbl-c">5.</td>
+    <td>${scr.attachments && scr.attachments[4] ? esc(scr.attachments[4].name) : ''}</td>
+  </tr>
+  <tr class="row-h-28">
+    <td class="lbl-c">3.</td>
+    <td>${scr.attachments && scr.attachments[2] ? esc(scr.attachments[2].name) : ''}</td>
+    <td class="lbl-c">6.</td>
+    <td>${scr.attachments && scr.attachments[5] ? esc(scr.attachments[5].name) : ''}</td>
   </tr>
 </table>
-</div>
 
-<!-- END USER DETAILS -->
-<div class="sec-head">End User Details</div>
-<div class="no-break">
-<table class="form-tbl">
-  <tr>
-    <td class="lbl">Requested By</td>
-    <td class="val">${esc(scr.requestedBy)}</td>
-    <td class="lbl">Received By</td>
-    <td class="val">${esc(scr.receivedBy)}</td>
+<!-- END USER — single 6-col table so the 3-col + 2-col blocks share borders -->
+<table class="f">
+  <colgroup>
+    <col style="width:16.67%"><col style="width:16.66%"><col style="width:16.67%">
+    <col style="width:16.66%"><col style="width:16.67%"><col style="width:16.67%">
+  </colgroup>
+  <tr><td class="sec" colspan="6">END USER</td></tr>
+  <tr class="row-h-28">
+    <td class="lbl-c" colspan="2">Requested By</td>
+    <td class="lbl-c" colspan="2">Received By</td>
+    <td class="lbl-c" colspan="2">Coordinated By</td>
   </tr>
-  <tr>
-    <td class="lbl">Coordinated By</td>
-    <td class="val">${esc(scr.coordinatedBy)}</td>
-    <td class="lbl">Department</td>
-    <td class="val">${esc(scr.department)}</td>
+  <tr class="row-h-42">
+    <td class="val-c" colspan="2">${esc(scr.requestedBy)}</td>
+    <td class="val-c" colspan="2">${esc(scr.receivedBy)}</td>
+    <td class="val-c" colspan="2">${esc(scr.coordinatedBy)}</td>
   </tr>
-  <tr>
-    <td class="lbl">Department HOD</td>
-    <td class="val" colspan="3">${esc(scr.hodName)}</td>
+  <tr class="row-h-28">
+    <td class="lbl-c" colspan="3">Department Name</td>
+    <td class="lbl-c" colspan="3">Department HOD</td>
+  </tr>
+  <tr class="row-h-42">
+    <td class="val-c" colspan="3">${esc(scr.department)}</td>
+    <td class="val-c" colspan="3">${esc(scr.hodName)}</td>
   </tr>
 </table>
-</div>
 
-<!-- STUDY DETAILS -->
-<div class="sec-head">Study Details</div>
-<div class="no-break">
-<table class="form-tbl">
-  <tr>
-    <td class="lbl">Study Done By (Primary)</td>
-    <td class="val">${esc(scr.studyDoneByPrimary)}</td>
-    <td class="lbl">Study Done By (Secondary)</td>
-    <td class="val">${esc(scr.studyDoneBySecondary)}</td>
+<!-- STUDY DETAILS — always begins on page 2 -->
+<table class="f page-break-before">
+  <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+  <tr><td class="sec" colspan="4">STUDY DETAILS</td></tr>
+  <tr class="row-h-28">
+    <td class="lbl-c">Study Done by</td>
+    <td class="lbl-c">Study Done by</td>
+    <td class="lbl-c">Study Date From</td>
+    <td class="lbl-c">Study Date To</td>
   </tr>
-  <tr>
-    <td class="lbl">Assigned Developer 1</td>
-    <td class="val">${esc(dev1 ? dev1.name : dash(scr.assignedDeveloper))}</td>
-    <td class="lbl">Assigned Developer 2</td>
-    <td class="val">${esc(dev2 ? dev2.name : dash(scr.assignedDeveloper2))}</td>
+  <tr class="row-h-48">
+    <td class="val-c">${esc(naIfEmpty(scr.studyDoneByPrimary))}</td>
+    <td class="val-c">${esc(naIfEmpty(scr.studyDoneBySecondary))}</td>
+    <td class="val-c">${fmt(scr.studyDateFrom)}</td>
+    <td class="val-c">${fmt(scr.studyDateTo)}</td>
   </tr>
-  <tr>
-    <td class="lbl">Assigned On</td>
-    <td class="val">${fmt(scr.assignedOn)}</td>
-    <td class="lbl">Completed On</td>
-    <td class="val">${fmt(scr.completedOn)}</td>
+  <tr class="row-h-28">
+    <td class="lbl-c">Assigned Developer 1</td>
+    <td class="lbl-c">Assigned Developer 2</td>
+    <td class="lbl-c">Assigned On</td>
+    <td class="lbl-c">Schedule On</td>
   </tr>
-  <tr>
-    <td class="lbl">Study Date From</td>
-    <td class="val">${fmt(scr.studyDateFrom)}</td>
-    <td class="lbl">Study Date To</td>
-    <td class="val">${fmt(scr.studyDateTo)}</td>
+  <tr class="row-h-48">
+    <td class="val-c">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</td>
+    <td class="val-c">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</td>
+    <td class="val-c">${fmt(scr.assignedOn)}</td>
+    <td class="val-c">${fmt(scr.scheduleDate)}</td>
   </tr>
-  <tr>
-    <td class="lbl">Schedule Date</td>
-    <td class="val">${fmt(scr.scheduleDate)}</td>
-    <td class="lbl"></td>
-    <td class="val"></td>
+  <tr class="row-h-28">
+    <td class="lbl-c">Completed On</td>
+    <td colspan="3" style="background:#fff"></td>
+  </tr>
+  <tr class="row-h-42">
+    <td class="val-c">${fmt(scr.completedOn)}</td>
+    <td colspan="3" style="background:#fff"></td>
   </tr>
 </table>
-</div>
 
-<!-- APPROVAL -->
-<div class="sec-head">Approval Decision</div>
-<div class="no-break" style="border:1px solid #999; padding:6px 8px;">
-  <div class="approval-checks">
-    <label><input type="checkbox" ${chkApproved}> Approved</label>
-    <label><input type="checkbox" ${chkRejected}> Not Approved</label>
-    <label><input type="checkbox" ${chkHold}> Hold</label>
-  </div>
-  <!-- Signatures -->
-  <table class="sign-tbl">
-    <tr>
-      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.projectHeadName || 'Project Head')}</div></td>
-      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.agmItName || 'AGM – IT')}</div></td>
-      <td><div class="sign-space"></div><div class="sign-line">${esc(scr.cioName || 'Chief Information Officer')}</div></td>
-    </tr>
-  </table>
-</div>
+<!-- APPROVALS -->
+<table class="f">
+  <colgroup><col style="width:16%"><col style="width:17%"><col style="width:16%"><col style="width:17%"><col style="width:16%"><col style="width:18%"></colgroup>
+  <tr><td class="sec" colspan="6">APPROVALS</td></tr>
+  <tr class="row-h-28">
+    <td class="ap-approved">Approved</td>
+    <td class="ap-mark">${isApproved ? '✓' : ''}</td>
+    <td class="ap-rejected">Not Approved</td>
+    <td class="ap-mark">${isRejected ? '✓' : ''}</td>
+    <td class="ap-hold">Hold</td>
+    <td class="ap-mark">${isHold ? '✓' : ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl" colspan="6" style="padding:0">
+      <div class="clip" style="height:38px;background:#f4f4f4"><strong>Reason:</strong> ${esc(approvalReason)}</div>
+    </td>
+  </tr>
+  <tr class="row-h-28">
+    <td class="lbl-c" colspan="2">Project Head</td>
+    <td class="lbl-c" colspan="2">AGM - IT</td>
+    <td class="lbl-c" colspan="2">Chief Information Officer</td>
+  </tr>
+  <tr>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.projectHeadName || 'Mr. Panneer Selvan')}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.agmItName || 'Mr. S. Saravanakumar')}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.cioName || 'Mr. Biju Velayudhan')}</div></td>
+  </tr>
+</table>
 
 <!-- REMARKS -->
-<div class="sec-head">Remarks</div>
-<div class="no-break">
-<table class="rem-tbl">
+<table class="f">
+  <tr><td class="sec">REMARKS</td></tr>
   <tr>
-    <td class="rem-lbl">Project Head Remarks</td>
-    <td class="rem-val">${esc(scr.remarkProjectHead)}</td>
+    <td class="area-sm" style="background:#fff">
+      <div class="clip"><strong>Project Head Remarks:</strong> ${esc(scr.remarkProjectHead)}</div>
+    </td>
   </tr>
   <tr>
-    <td class="rem-lbl">AGM – IT Remarks</td>
-    <td class="rem-val">${esc(scr.remarkAgmIt || agmDecision?.comments)}</td>
+    <td class="area-sm" style="background:#fff">
+      <div class="clip"><strong>AGM IT Remarks:</strong> ${esc(scr.remarkAgmIt || agmDecision?.comments)}</div>
+    </td>
   </tr>
   <tr>
-    <td class="rem-lbl">CIO Remarks</td>
-    <td class="rem-val">${esc(scr.remarkCio || cioDecision?.comments)}</td>
+    <td class="area-sm" style="background:#fff">
+      <div class="clip"><strong>CIO Remarks:</strong> ${esc(scr.remarkCio || cioDecision?.comments)}</div>
+    </td>
   </tr>
 </table>
-</div>
 
-<!-- FOOTER -->
-<div class="print-footer">
-  <b>NOTE:</b>&nbsp; Request Description: Describe the change clearly. &nbsp;|&nbsp;
-  Reasons: Explain business impact and expected outcome.<br>
-  <i>Behind every system change is a push for better healthcare delivery.</i>
-  &emsp;|&emsp; Printed: ${new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
-</div>
+<!-- NOTE -->
+<table class="f note-body">
+  <tr><td class="sec">NOTE:</td></tr>
+  <tr>
+    <td>
+      <strong>Request Description:</strong> Describe the change being requested. Be as specific as possible. If appropriate include technical details, diagrams, and a 'before and after' description.
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <strong>Reasons for this Change:</strong> Request describe the reasons and the purposes of this request (what is the process or technical driver). Explain the impact of the change request on the Business Case.
+    </td>
+  </tr>
+  <tr class="quote-row">
+    <td>Behind every system change is a push for better healthcare delivery.</td>
+  </tr>
+</table>
 
+</div><!-- /.page-wrap -->
 </body></html>`;
 
     const blob = new Blob([htmlContent], { type: 'text/html' });

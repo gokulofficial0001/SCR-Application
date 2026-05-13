@@ -26,6 +26,9 @@ const DevUpdates = {
     if (scr.currentStage < 5 || scr.status === 'Closed' || scr.status === 'Rejected') {
       return { success: false, error: 'Updates can only be posted during Development stage' };
     }
+    if (scr.status === 'On Hold') {
+      return { success: false, error: 'This SCR is on hold — resume it before posting updates' };
+    }
 
     // Validate
     if (!Utils.isNonEmpty(title)) return { success: false, error: 'Title is required' };

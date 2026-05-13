@@ -164,64 +164,75 @@ const MasterData = {
       <div class="modal modal-sm">
         <div class="modal-header">
           <h3 class="modal-title">${isEdit ? 'Edit' : 'Add'} Department</h3>
-          <button class="modal-close" onclick="document.getElementById('dept-modal').remove()">✕</button>
+          <button class="modal-close" onclick="MasterData._safeClose('dept-modal')">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">Department Name <span class="required">*</span></label>
-            <input type="text" class="form-input" id="dept-name" value="${Utils.escapeHtml(dept.name || '')}" placeholder="e.g., Cardiology">
+            <input type="text" class="form-input" id="dept-name" value="${Utils.escapeHtml(dept.name || '')}" placeholder="e.g., Cardiology" maxlength="80" autocomplete="off">
+            <span class="form-hint">2-80 characters. Must be unique.</span>
           </div>
           <div class="form-group">
             <label class="form-label">HOD Name <span class="required">*</span></label>
-            <input type="text" class="form-input" id="dept-hod" value="${Utils.escapeHtml(dept.hodName || '')}" placeholder="e.g., Dr. Ramesh Kumar">
+            <input type="text" class="form-input" id="dept-hod" value="${Utils.escapeHtml(dept.hodName || '')}" placeholder="e.g., Dr. Ramesh Kumar" maxlength="80" autocomplete="off">
           </div>
           <div class="form-group">
             <label class="form-label">HOD Email</label>
-            <input type="email" class="form-input" id="dept-email" value="${Utils.escapeHtml(dept.hodEmail || '')}" placeholder="e.g., ramesh@hospital.in">
+            <input type="email" class="form-input" id="dept-email" value="${Utils.escapeHtml(dept.hodEmail || '')}" placeholder="e.g., ramesh@hospital.in" maxlength="120" autocomplete="off">
+            <span class="form-hint">Optional. Must be a valid email if provided.</span>
           </div>
           <div class="form-group">
             <label class="form-label">IT Coordinator Name</label>
-            <input type="text" class="form-input" id="dept-coordinator" value="${Utils.escapeHtml(dept.coordinatorName || '')}" placeholder="e.g., Mr. Arjun M">
+            <input type="text" class="form-input" id="dept-coordinator" value="${Utils.escapeHtml(dept.coordinatorName || '')}" placeholder="e.g., Mr. Gokulraj S" maxlength="80" autocomplete="off">
             <span class="form-hint">Auto-fills the "Coordinated By" field on SCRs from this department</span>
           </div>
           <div class="form-group">
             <label class="form-label">IT Coordinator Email</label>
-            <input type="email" class="form-input" id="dept-coordinator-email" value="${Utils.escapeHtml(dept.coordinatorEmail || '')}" placeholder="e.g., arjun@hospital.in">
+            <input type="email" class="form-input" id="dept-coordinator-email" value="${Utils.escapeHtml(dept.coordinatorEmail || '')}" placeholder="e.g., arjun@hospital.in" maxlength="120" autocomplete="off">
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="document.getElementById('dept-modal').remove()">Cancel</button>
+          <button class="btn btn-ghost" onclick="MasterData._safeClose('dept-modal')">Cancel</button>
           <button class="btn btn-primary" onclick="MasterData.saveDept('${editId || ''}')">${isEdit ? 'Update' : 'Add'}</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
+
+    // Dirty-form guard: snapshot original values, then watch for closes
+    const originals = {
+      'dept-name':              dept.name || '',
+      'dept-hod':               dept.hodName || '',
+      'dept-email':             dept.hodEmail || '',
+      'dept-coordinator':       dept.coordinatorName || '',
+      'dept-coordinator-email': dept.coordinatorEmail || ''
+    };
+    this._setupDirtyGuard(overlay, 'dept-modal', Object.keys(originals), originals, 'department');
   },
 
   saveDept(editId) {
-    const name = document.getElementById('dept-name').value.trim();
-    const hodName = document.getElementById('dept-hod').value.trim();
-    const hodEmail = document.getElementById('dept-email').value.trim();
-    const coordinatorName = document.getElementById('dept-coordinator').value.trim();
-    const coordinatorEmail = document.getElementById('dept-coordinator-email').value.trim();
+    const payload = {
+      name:             document.getElementById('dept-name').value.trim(),
+      hodName:          document.getElementById('dept-hod').value.trim(),
+      hodEmail:         document.getElementById('dept-email').value.trim(),
+      coordinatorName:  document.getElementById('dept-coordinator').value.trim(),
+      coordinatorEmail: document.getElementById('dept-coordinator-email').value.trim()
+    };
 
-    if (!name || !hodName) {
-      Utils.toast('warning', 'Required', 'Name and HOD are required');
-      return;
-    }
-
-    const payload = { name, hodName, hodEmail, coordinatorName, coordinatorEmail };
+    const err = this._validateDept(payload, editId || null);
+    if (err) { this._showError(err.field, err.message); return; }
 
     if (editId) {
       Store.update('departments', editId, payload);
-      Audit.log('Department', editId, 'Updated', 'name', null, name);
-      Utils.toast('success', 'Updated', `${name} department updated`);
+      Audit.log('Department', editId, 'Updated', 'name', null, payload.name);
+      Utils.toast('success', 'Updated', `${payload.name} department updated`);
     } else {
       Store.add('departments', payload);
-      Audit.log('Department', name, 'Created', null, null, name);
-      Utils.toast('success', 'Added', `${name} department added`);
+      Audit.log('Department', payload.name, 'Created', null, null, payload.name);
+      Utils.toast('success', 'Added', `${payload.name} department added`);
     }
 
+    this._disposeGuard('dept-modal');
     document.getElementById('dept-modal')?.remove();
     Router.navigate('master-data');
   },
@@ -270,27 +281,31 @@ const MasterData = {
       <div class="modal">
         <div class="modal-header">
           <h3 class="modal-title">${isEdit ? 'Edit' : 'Add'} User</h3>
-          <button class="modal-close" onclick="document.getElementById('user-modal').remove()">✕</button>
+          <button class="modal-close" onclick="MasterData._safeClose('user-modal')">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Full Name <span class="required">*</span></label>
-              <input type="text" class="form-input" id="user-name" value="${Utils.escapeHtml(user.name || '')}">
+              <input type="text" class="form-input" id="user-name" value="${Utils.escapeHtml(user.name || '')}" placeholder="e.g., Mr. Gokulraj S" maxlength="80" autocomplete="off">
+              <span class="form-hint">2-80 characters</span>
             </div>
             <div class="form-group">
               <label class="form-label">Username <span class="required">*</span></label>
-              <input type="text" class="form-input" id="user-username" value="${Utils.escapeHtml(user.username || '')}">
+              <input type="text" class="form-input" id="user-username" value="${Utils.escapeHtml(user.username || '')}" placeholder="e.g., gokulraj" maxlength="30" pattern="[a-z0-9_]{3,30}" autocomplete="off">
+              <span class="form-hint">3-30 chars: lowercase letters, numbers, underscores. Must be unique.</span>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Password <span class="required">*</span></label>
-              <input type="text" class="form-input" id="user-password" value="${Utils.escapeHtml(user.password || '')}">
+              <input type="text" class="form-input" id="user-password" value="${Utils.escapeHtml(user.password || '')}" placeholder="At least 4 characters" maxlength="60" autocomplete="new-password">
+              <span class="form-hint">Min 4 characters</span>
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
-              <input type="email" class="form-input" id="user-email" value="${Utils.escapeHtml(user.email || '')}">
+              <input type="email" class="form-input" id="user-email" value="${Utils.escapeHtml(user.email || '')}" placeholder="e.g., name@hospital.in" maxlength="120" autocomplete="off">
+              <span class="form-hint">Optional. Must be unique if provided.</span>
             </div>
           </div>
           <div class="form-row">
@@ -309,47 +324,94 @@ const MasterData = {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="document.getElementById('user-modal').remove()">Cancel</button>
+          <button class="btn btn-ghost" onclick="MasterData._safeClose('user-modal')">Cancel</button>
           <button class="btn btn-primary" onclick="MasterData.saveUser('${editId || ''}')">${isEdit ? 'Update' : 'Add'}</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
+
+    // Dirty-form guard
+    const originals = {
+      'user-name':     user.name || '',
+      'user-username': user.username || '',
+      'user-password': user.password || '',
+      'user-email':    user.email || '',
+      'user-role':     user.role || (roles[0] || ''),
+      'user-dept':     user.department || (depts[0]?.name || '')
+    };
+    this._setupDirtyGuard(overlay, 'user-modal', Object.keys(originals), originals, 'user');
   },
 
   saveUser(editId) {
     const data = {
-      name: document.getElementById('user-name').value.trim(),
-      username: document.getElementById('user-username').value.trim(),
-      password: document.getElementById('user-password').value,
-      email: document.getElementById('user-email').value.trim(),
-      role: document.getElementById('user-role').value,
+      name:       document.getElementById('user-name').value.trim(),
+      // Usernames are lowercased for case-insensitive matching
+      username:   document.getElementById('user-username').value.trim().toLowerCase(),
+      password:   document.getElementById('user-password').value,
+      email:      document.getElementById('user-email').value.trim(),
+      role:       document.getElementById('user-role').value,
       department: document.getElementById('user-dept').value
     };
 
-    if (!data.name || !data.username || !data.password) {
-      Utils.toast('warning', 'Required', 'Name, username, and password are required');
-      return;
-    }
+    const err = this._validateUser(data, editId || null);
+    if (err) { this._showError(err.field, err.message); return; }
 
     if (editId) {
+      const old = Store.getById('users', editId);
       Store.update('users', editId, data);
+      Audit.log('User', editId, 'Updated', null, old ? old.name : null, data.name);
       Utils.toast('success', 'Updated', `User ${data.name} updated`);
     } else {
       Store.add('users', data);
+      Audit.log('User', data.username, 'Created', null, null, data.name);
       Utils.toast('success', 'Added', `User ${data.name} created`);
     }
 
+    this._disposeGuard('user-modal');
     document.getElementById('user-modal')?.remove();
     Router.navigate('master-data');
   },
 
   async deleteUser(id) {
     const user = Store.getById('users', id);
-    const confirmed = await Utils.confirm('Delete User?', `Remove "${user?.name}"?`, 'danger');
+    if (!user) return;
+
+    // Cannot delete self
+    const session = Auth.currentUser();
+    if (session && session.id === id) {
+      Utils.toast('error', 'Cannot Delete', 'You cannot delete your own account while signed in.');
+      return;
+    }
+
+    // Last-admin protection
+    if (user.role === 'admin') {
+      const admins = Store.filter('users', u => u.role === 'admin');
+      if (admins.length <= 1) {
+        Utils.toast('error', 'Cannot Delete', 'At least one admin must remain in the system.');
+        return;
+      }
+    }
+
+    // Reference check — historic data stays but workflow displays may show "user unavailable"
+    const refs = Store.filter('scr_requests', s =>
+      s.createdBy === id ||
+      s.assignedDeveloper === id ||
+      s.assignedDeveloper2 === id ||
+      s.acknowledgedBy === id ||
+      s.phAcceptedBy === id ||
+      s.heldBy === id
+    );
+
+    const msg = refs.length > 0
+      ? `${user.name} is referenced by ${refs.length} SCR${refs.length > 1 ? 's' : ''}. Historic data will be preserved, but those SCRs may show "(user unavailable)" in workflow timelines. Continue?`
+      : `Remove "${user.name}"? This cannot be undone.`;
+
+    const confirmed = await Utils.confirm('Delete User?', msg, 'danger');
     if (confirmed) {
       Store.remove('users', id);
-      Utils.toast('success', 'Deleted', 'User removed');
+      Audit.log('User', id, 'Deleted', null, user.name, null);
+      Utils.toast('success', 'Deleted', `${user.name} removed`);
       Router.navigate('master-data');
     }
   },
@@ -443,11 +505,16 @@ const MasterData = {
   },
 
   // ── Save SLA config ─────────────────────────────────────
+  // SLA rows are keyed by priority (unique). The seed historically
+  // didn't assign ids, so we update by priority match — this also
+  // sidesteps any id mismatch between installs.
   saveSLA() {
     const config = Store.getAll('sla_config');
     const invalid = [];
+    const next = config.map(cfg => ({ ...cfg }));
     let updated = 0;
-    config.forEach(cfg => {
+
+    next.forEach(cfg => {
       const input = document.getElementById(`sla-${cfg.priority}`);
       if (!input) return;
       const newVal = parseInt(input.value, 10);
@@ -456,7 +523,8 @@ const MasterData = {
         return;
       }
       if (newVal !== cfg.maxHours) {
-        Store.update('sla_config', cfg.id, { maxHours: newVal });
+        cfg.maxHours = newVal;
+        if (!cfg.id) cfg.id = Utils.generateId();  // backfill missing id
         updated++;
       }
     });
@@ -467,7 +535,230 @@ const MasterData = {
       return;
     }
 
+    if (updated > 0) {
+      Store._set('sla_config', next);
+      Audit.log('System', 'sla_config', 'Updated', 'SLA Config', null, `${updated} row(s)`);
+    }
     Utils.toast('success', 'SLA Updated', updated > 0 ? `${updated} SLA row(s) saved` : 'No changes');
-    if (updated > 0) Audit.log('System', 'sla_config', 'Updated', 'SLA Config', null, 'Updated');
+  },
+
+  // ── Validation helpers ─────────────────────────────────
+  // Inline error: red border + message under the field. Self-clears
+  // as soon as the user edits the offending input.
+  _showError(fieldId, message) {
+    const el = document.getElementById(fieldId);
+    if (!el) {
+      Utils.toast('warning', 'Invalid Input', message);
+      return;
+    }
+    el.style.borderColor = 'var(--color-danger)';
+    el.style.boxShadow = '0 0 0 3px rgba(184, 52, 30, 0.15)';
+
+    const parent = el.parentElement;
+    parent.querySelectorAll('.md-field-error').forEach(n => n.remove());
+
+    const err = document.createElement('div');
+    err.className = 'md-field-error';
+    err.style.cssText = 'color:var(--color-danger);font-size:var(--font-xs);margin-top:4px;font-weight:500;line-height:1.4';
+    err.textContent = message;
+    parent.appendChild(err);
+
+    setTimeout(() => el.focus(), 50);
+
+    const clearOnce = () => {
+      el.style.borderColor = '';
+      el.style.boxShadow = '';
+      parent.querySelectorAll('.md-field-error').forEach(n => n.remove());
+      el.removeEventListener('input', clearOnce);
+      el.removeEventListener('change', clearOnce);
+    };
+    el.addEventListener('input', clearOnce);
+    el.addEventListener('change', clearOnce);
+  },
+
+  // Returns { field, message } if invalid; null if OK
+  _validateDept(data, editId) {
+    const nameSafe = /^[A-Za-z0-9 \-&.,()'/]+$/;
+    if (!data.name) return { field: 'dept-name', message: 'Department name is required' };
+    if (data.name.length < 2) return { field: 'dept-name', message: 'Name must be at least 2 characters' };
+    if (data.name.length > 80) return { field: 'dept-name', message: 'Name cannot exceed 80 characters' };
+    if (!nameSafe.test(data.name)) return { field: 'dept-name', message: 'Name contains invalid characters' };
+
+    if (!data.hodName) return { field: 'dept-hod', message: 'HOD name is required' };
+    if (data.hodName.length < 2) return { field: 'dept-hod', message: 'HOD name must be at least 2 characters' };
+    if (data.hodName.length > 80) return { field: 'dept-hod', message: 'HOD name cannot exceed 80 characters' };
+
+    if (data.hodEmail && !Utils.isValidEmail(data.hodEmail)) {
+      return { field: 'dept-email', message: 'HOD email is not a valid email address' };
+    }
+    if (data.coordinatorName && data.coordinatorName.length > 80) {
+      return { field: 'dept-coordinator', message: 'Coordinator name cannot exceed 80 characters' };
+    }
+    if (data.coordinatorEmail && !Utils.isValidEmail(data.coordinatorEmail)) {
+      return { field: 'dept-coordinator-email', message: 'Coordinator email is not a valid email address' };
+    }
+
+    // Duplicate name (case-insensitive, excluding self when editing)
+    const dupe = Store.getAll('departments').find(d =>
+      d.name.toLowerCase() === data.name.toLowerCase() && d.id !== editId
+    );
+    if (dupe) return { field: 'dept-name', message: 'A department with this name already exists' };
+
+    return null;
+  },
+
+  _validateUser(data, editId) {
+    if (!data.name) return { field: 'user-name', message: 'Full name is required' };
+    if (data.name.length < 2) return { field: 'user-name', message: 'Name must be at least 2 characters' };
+    if (data.name.length > 80) return { field: 'user-name', message: 'Name cannot exceed 80 characters' };
+
+    if (!data.username) return { field: 'user-username', message: 'Username is required' };
+    if (data.username.length < 3) return { field: 'user-username', message: 'Username must be at least 3 characters' };
+    if (data.username.length > 30) return { field: 'user-username', message: 'Username cannot exceed 30 characters' };
+    if (!/^[a-z0-9_]+$/.test(data.username)) {
+      return { field: 'user-username', message: 'Username can only contain lowercase letters, numbers, and underscores' };
+    }
+
+    if (!data.password) return { field: 'user-password', message: 'Password is required' };
+    if (data.password.length < 4) return { field: 'user-password', message: 'Password must be at least 4 characters' };
+    if (data.password.length > 60) return { field: 'user-password', message: 'Password cannot exceed 60 characters' };
+
+    if (data.email && !Utils.isValidEmail(data.email)) {
+      return { field: 'user-email', message: 'Email is not a valid email address' };
+    }
+
+    const validRoles = Object.keys(Utils.roleLabels);
+    if (!validRoles.includes(data.role)) {
+      return { field: 'user-role', message: 'Please select a valid role' };
+    }
+
+    const allUsers = Store.getAll('users');
+
+    const dupeName = allUsers.find(u =>
+      u.username && u.username.toLowerCase() === data.username.toLowerCase() && u.id !== editId
+    );
+    if (dupeName) return { field: 'user-username', message: 'A user with this username already exists' };
+
+    if (data.email) {
+      const dupeEmail = allUsers.find(u =>
+        u.email && u.email.toLowerCase() === data.email.toLowerCase() && u.id !== editId
+      );
+      if (dupeEmail) return { field: 'user-email', message: 'Another user already has this email' };
+    }
+
+    // Lockout guard: don't let an admin demote themselves
+    const session = Auth.currentUser();
+    if (editId && session && session.id === editId) {
+      const existing = Store.getById('users', editId);
+      if (existing && existing.role === 'admin' && data.role !== 'admin') {
+        return { field: 'user-role', message: 'You cannot remove admin privileges from your own account while signed in.' };
+      }
+    }
+
+    // Last-admin guard: must keep at least one admin in the system
+    if (editId) {
+      const existing = Store.getById('users', editId);
+      if (existing && existing.role === 'admin' && data.role !== 'admin') {
+        const admins = allUsers.filter(u => u.role === 'admin');
+        if (admins.length <= 1) {
+          return { field: 'user-role', message: 'Cannot change role — at least one admin must remain in the system.' };
+        }
+      }
+    }
+
+    return null;
+  },
+
+  // ── Modal dirty-form guard ─────────────────────────────
+  // Prevents accidental data loss when user clicks outside the modal
+  // or presses Escape. Compares current field values against the
+  // originals captured at modal open. If anything changed, asks for
+  // confirmation before closing; otherwise closes silently.
+  _guarded: {},
+
+  _setupDirtyGuard(overlay, modalId, fieldIds, originals, kind) {
+    const getDirty = () => fieldIds.some(id => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      return (el.value || '').trim() !== (originals[id] || '').trim();
+    });
+
+    const escHandler = (e) => {
+      if (e.key !== 'Escape') return;
+      if (!document.body.contains(overlay)) {
+        document.removeEventListener('keydown', escHandler, true);
+        return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      this._safeClose(modalId);
+    };
+    document.addEventListener('keydown', escHandler, true);
+
+    // Intercept outside-click BEFORE the global handler in app.js fires
+    overlay.addEventListener('click', (e) => {
+      if (e.target !== overlay) return;  // click was inside the modal box
+      e.stopPropagation();
+      this._safeClose(modalId);
+    }, true);
+
+    this._guarded[modalId] = { getDirty, escHandler, kind };
+  },
+
+  _disposeGuard(modalId) {
+    const g = this._guarded[modalId];
+    if (!g) return;
+    document.removeEventListener('keydown', g.escHandler, true);
+    delete this._guarded[modalId];
+  },
+
+  _safeClose(modalId) {
+    const overlay = document.getElementById(modalId);
+    if (!overlay) return;
+    const g = this._guarded[modalId];
+    if (!g || !g.getDirty()) {
+      this._disposeGuard(modalId);
+      overlay.remove();
+      return;
+    }
+    this._confirmDiscard(g.kind, () => {
+      this._disposeGuard(modalId);
+      overlay.remove();
+    });
+  },
+
+  // Same-DOM confirmation dialog (stacked on top of the form modal).
+  // Higher z-index than its parent so the parent stays visible behind it.
+  _confirmDiscard(kind, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '10001';
+    overlay.innerHTML = `
+      <div class="modal modal-sm" style="max-width:440px">
+        <div class="modal-body" style="padding:var(--space-6);text-align:center">
+          <div style="font-size:3rem;margin-bottom:var(--space-3)">⚠️</div>
+          <h4 style="margin-bottom:var(--space-2);font-size:var(--font-lg)">Discard changes?</h4>
+          <p class="text-secondary" style="line-height:1.6;margin-bottom:var(--space-5);font-size:var(--font-base)">
+            You've started entering ${Utils.escapeHtml(kind)} details. If you close now, your changes will be lost.
+          </p>
+          <div class="flex" style="gap:var(--space-3);justify-content:center">
+            <button class="btn btn-ghost" id="dg-keep">No, Keep Editing</button>
+            <button class="btn btn-danger" id="dg-discard">Yes, Discard</button>
+          </div>
+        </div>
+      </div>
+    `;
+    // Block bubbling so the global app.js outside-click handler doesn't
+    // remove this confirmation; user must use the buttons.
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) e.stopPropagation();
+    }, true);
+    document.body.appendChild(overlay);
+    overlay.querySelector('#dg-keep').onclick = () => overlay.remove();
+    overlay.querySelector('#dg-discard').onclick = () => {
+      overlay.remove();
+      onConfirm();
+    };
+    setTimeout(() => overlay.querySelector('#dg-keep')?.focus(), 50);
   }
 };

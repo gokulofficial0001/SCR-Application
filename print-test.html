@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Print Test — SCR-2026-0001</title>
+  <style>
+    body { font-family: 'Calibri', 'Segoe UI', sans-serif; padding: 20px; background: #f0f2f4; color: #1a1a1a; margin: 0; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .card { background: white; padding: 18px 22px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 14px; }
+    h1 { margin: 0 0 10px; font-size: 20px; }
+    h2 { margin: 0 0 8px; font-size: 14px; color: #555; }
+    p { margin: 4px 0; font-size: 13px; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .pill-ok { background: #d3edd0; color: #1d6e1f; }
+    .pill-err { background: #fcdada; color: #8a2222; }
+    button { font-size: 14px; padding: 9px 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 5px; margin-right: 6px; }
+    button:hover { background: #1d4ed8; }
+    iframe { width: 100%; height: 2100px; border: 1px solid #aaa; background: white; display: block; }
+    /* Visual marker showing where page 1 ends (A4 portrait, 12mm margin = ~1015 px of content) */
+    .a4-marker {
+      position: relative; max-width: 100%;
+    }
+    .a4-line {
+      position: absolute; left: 0; right: 0;
+      top: 1015px;
+      border-top: 2px dashed #f00;
+      pointer-events: none; z-index: 9;
+    }
+    .a4-label {
+      position: absolute; right: 12px; top: 1018px;
+      background: #f00; color: white; padding: 2px 8px; font-size: 11px;
+      font-weight: 700; border-radius: 3px; z-index: 10;
+    }
+    pre { background: #f7f7f7; padding: 8px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+    .err { color: #c00; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <h1>Print Test — SCR-2026-0001</h1>
+    <p id="status">Loading SCR data from <code>/api/scr_requests</code>…</p>
+    <p id="info"></p>
+    <p id="errlog" class="err"></p>
+  </div>
+
+  <div class="card" id="actions" style="display:none">
+    <button onclick="renderInline()">👁 Show inline preview (below)</button>
+    <button onclick="openPopup()">🖨 Open print window (popup)</button>
+    <p style="margin-top:8px;color:#666">
+      Inline = quick visual check, no popup. Popup = the real print window with Ctrl+P.
+    </p>
+  </div>
+
+  <div class="card" id="frame-wrap" style="display:none;padding:0;background:#ccc;border-radius:0">
+    <div class="a4-marker">
+      <div class="a4-line"></div>
+      <div class="a4-label">⬆ Page 1 of A4 ends here (1015 px from top)</div>
+      <iframe id="preview"></iframe>
+    </div>
+    <div style="background:#fff8e0;padding:10px 16px;font-size:12px;border-top:1px solid #aaa">
+      <b>Note:</b> The iframe shows the print HTML as one continuous scroll.
+      The red dashed line marks where <b>A4 Page 1 ends</b> — content above the line
+      prints on Page 1, content below prints on Page 2. <b>STUDY DETAILS should be
+      the first section below the red line.</b> Use <b>"Open print window"</b>
+      (Ctrl+P inside it) to see the actual paginated output.
+    </div>
+  </div>
+
+</div>
+
+<script>
+let scrData = null, users = [], approvals = [], printHTML = null;
+
+async function init() {
+  try {
+    const [scrAll, userAll, apprAll] = await Promise.all([
+      fetch('/api/scr_requests').then(r => r.json()),
+      fetch('/api/users').then(r => r.json()),
+      fetch('/api/approvals').then(r => r.json())
+    ]);
+    const scr = scrAll.find(s => s.scrNumber === 'SCR-2026-0001');
+    if (!scr) {
+      setStatus('err', 'SCR-2026-0001 not found in database.');
+      return;
+    }
+    scrData = scr;
+    users = userAll;
+    approvals = apprAll.filter(a => a.scrId === scr.id);
+
+    const dev1 = users.find(u => u.id === scr.assignedDeveloper);
+    const dev2 = users.find(u => u.id === scr.assignedDeveloper2);
+
+    setStatus('ok', 'SCR-2026-0001 loaded successfully.');
+    document.getElementById('info').innerHTML =
+      `<b>Module:</b> ${esc(scr.moduleName)}  ·  ` +
+      `<b>Desc:</b> ${scr.description.length} chars  ·  ` +
+      `<b>Approval:</b> ${esc(scr.approvalStatus || 'none')}  ·  ` +
+      `<b>Stage/Status:</b> ${scr.currentStage}/${esc(scr.status)}  ·  ` +
+      `<b>Dev1:</b> ${esc(dev1 ? dev1.name : '—')}  ·  ` +
+      `<b>Dev2:</b> ${esc(dev2 ? dev2.name : '—')}`;
+
+    printHTML = buildPrintHTML(scr, dev1, dev2, approvals);
+    document.getElementById('actions').style.display = 'block';
+  } catch (e) {
+    setStatus('err', 'Error: ' + e.message);
+    document.getElementById('errlog').innerText = e.stack || String(e);
+  }
+}
+
+function setStatus(kind, text) {
+  document.getElementById('status').innerHTML =
+    `<span class="pill pill-${kind}">${kind.toUpperCase()}</span>  ${esc(text)}`;
+}
+
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  const d = document.createElement('div'); d.textContent = String(v); return d.innerHTML;
+}
+
+function fmt(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '';
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function naIfEmpty(v) { return (v && String(v).trim()) ? v : 'NA'; }
+
+function renderInline() {
+  if (!printHTML) return;
+  const iframe = document.getElementById('preview');
+  document.getElementById('frame-wrap').style.display = 'block';
+  // Use srcdoc for self-contained inline rendering — no popup, no /api hit
+  iframe.srcdoc = printHTML;
+  iframe.scrollIntoView({ behavior: 'smooth' });
+}
+
+function openPopup() {
+  if (!printHTML) return;
+  const blob = new Blob([printHTML], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank', 'width=900,height=1200');
+  if (!win) { alert('Popup blocked. Allow popups for localhost:3500.'); return; }
+  win.addEventListener('load', () => {
+    setTimeout(() => { try { win.print(); } catch(e){} }, 400);
+  });
+}
+
+// ── Print HTML builder ──────────────────────────────────
+// MIRRORS the template in js/scr-manager.js → SCRManager.printSCR.
+// Kept in sync manually because this page must work without loading the app JS.
+function buildPrintHTML(scr, dev1, dev2, approvalsList) {
+  const agmDecision = approvalsList.find(a => a.approverRole === 'agm_it');
+  const cioDecision = approvalsList.find(a => a.approverRole === 'cio');
+  const directStatus = scr.approvalStatus || '';
+  const isApproved =
+    directStatus === 'Approved' ||
+    (directStatus === '' && agmDecision?.decision === 'Approved' && cioDecision?.decision === 'Approved');
+  const isRejected =
+    directStatus === 'Not Approved' ||
+    (directStatus === '' && (agmDecision?.decision === 'Rejected' || cioDecision?.decision === 'Rejected'));
+  const isHold =
+    !isApproved && !isRejected && (
+      directStatus === 'Hold' ||
+      agmDecision?.decision === 'Hold' ||
+      cioDecision?.decision === 'Hold' ||
+      scr.status === 'On Hold'
+    );
+  const approvalReason = scr.approvalReason || scr.remarkProjectHead || agmDecision?.comments || cioDecision?.comments || '';
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>${esc(scr.scrNumber)} — SCR Form</title>
+<style>
+@page { size: A4 portrait; margin: 12mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; margin: 0; padding: 0; }
+body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #000; background: #fff; line-height: 1.4; }
+.page-wrap { width: 100%; margin: 0 auto; padding: 0; }
+.title-banner { border: 2px solid #4a6b1e; text-align: center; padding: 8px; margin: 0; }
+.title-banner h1 { font-size: 26px; font-weight: 800; letter-spacing: 0.5px; color: #000; }
+table.f { width: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; margin-bottom: -1px; }
+.title-banner + table.f { margin-top: 0; }
+table.f td { border: 1px solid #444; padding: 5px 10px; vertical-align: middle; word-wrap: break-word; overflow: hidden; }
+.page-break-before { page-break-before: always; break-before: page; }
+td.sec { background: #a2c878; font-weight: 700; font-size: 12.5px; color: #000; padding: 5px 12px; text-transform: uppercase; letter-spacing: 0.3px; height: 22px; }
+td.lbl   { font-weight: 700; background: #f4f4f4; font-size: 12px; }
+td.lbl-c { font-weight: 700; background: #f4f4f4; font-size: 12px; text-align: center; }
+td.val-c { text-align: center; vertical-align: middle; }
+td.area    { padding: 0; vertical-align: top; height: 155px; }
+td.area-lg { padding: 0; vertical-align: top; height: 155px; }
+td.area-sm { padding: 0; vertical-align: top; height: 62px;  }
+.clip { padding: 8px 12px; overflow: hidden; word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.5; box-sizing: border-box; }
+td.area    > .clip { height: 155px; }
+td.area-lg > .clip { height: 155px; }
+td.area-sm > .clip { height: 62px;  }
+.row-h-28 td { height: 42px; }
+.row-h-42 td { height: 58px; }
+.row-h-48 td { height: 58px; }
+td.sig { padding: 0; vertical-align: bottom; text-align: center; height: 62px; }
+td.sig > .sig-inner { height: 62px; padding: 0 6px 8px; box-sizing: border-box; display: flex; align-items: flex-end; justify-content: center; word-wrap: break-word; font-size: 13px; font-weight: 600; }
+td.ap-approved { background: #7fc356; color: #000; text-align: center; font-weight: 700; }
+td.ap-rejected { background: #f0a050; color: #000; text-align: center; font-weight: 700; }
+td.ap-hold     { background: #5a9fd4; color: #000; text-align: center; font-weight: 700; }
+td.ap-mark { text-align: center; font-weight: 700; font-size: 16px; }
+.note-body td { font-size: 11.5px; line-height: 1.55; }
+.note-body td.note-lbl { font-weight: 700; width: 24%; vertical-align: top; }
+.quote-row td { text-align: center; font-style: italic; color: #c2185b; padding: 12px; font-size: 13px; background: #fafafa; }
+@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+<div class="page-wrap">
+
+<div class="title-banner"><h1>SOFTWARE CHANGE REQUEST (SCR) FORM</h1></div>
+
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:32%"><col style="width:18%"><col style="width:32%"></colgroup>
+  <tr class="row-h-28"><td class="lbl">SCR Number</td><td>${esc(scr.scrNumber)}</td><td class="lbl">Date</td><td>${fmt(scr.scrDate || scr.createdAt)}</td></tr>
+</table>
+
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:82%"></colgroup>
+  <tr><td class="sec" colspan="2">PROJECT DETAILS</td></tr>
+  <tr class="row-h-28"><td class="lbl">Request Type</td><td>${esc(scr.requestType)}</td></tr>
+  <tr class="row-h-28"><td class="lbl">Intervention</td><td>${esc(scr.intervention || scr.priority)}</td></tr>
+</table>
+
+<table class="f">
+  <colgroup><col style="width:18%"><col style="width:82%"></colgroup>
+  <tr><td class="sec" colspan="2">REQUEST DESCRIPTION</td></tr>
+  <tr class="row-h-28"><td class="lbl">Module Name</td><td>${esc(scr.moduleName)}</td></tr>
+  <tr><td colspan="2" class="area"><div class="clip">${esc(scr.description)}</div></td></tr>
+</table>
+
+<table class="f">
+  <tr><td class="sec">REASON FOR CHANGE</td></tr>
+  <tr><td class="area-lg"><div class="clip">${esc(scr.reasonForChange)}</div></td></tr>
+</table>
+
+<table class="f">
+  <colgroup><col style="width:6%"><col style="width:44%"><col style="width:6%"><col style="width:44%"></colgroup>
+  <tr><td class="sec" colspan="4">ATTACHMENTS</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">1.</td><td>${scr.attachments && scr.attachments[0] ? esc(scr.attachments[0].name) : ''}</td><td class="lbl-c">4.</td><td>${scr.attachments && scr.attachments[3] ? esc(scr.attachments[3].name) : ''}</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">2.</td><td>${scr.attachments && scr.attachments[1] ? esc(scr.attachments[1].name) : ''}</td><td class="lbl-c">5.</td><td>${scr.attachments && scr.attachments[4] ? esc(scr.attachments[4].name) : ''}</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">3.</td><td>${scr.attachments && scr.attachments[2] ? esc(scr.attachments[2].name) : ''}</td><td class="lbl-c">6.</td><td>${scr.attachments && scr.attachments[5] ? esc(scr.attachments[5].name) : ''}</td></tr>
+</table>
+
+<table class="f">
+  <colgroup><col style="width:16.67%"><col style="width:16.66%"><col style="width:16.67%"><col style="width:16.66%"><col style="width:16.67%"><col style="width:16.67%"></colgroup>
+  <tr><td class="sec" colspan="6">END USER</td></tr>
+  <tr class="row-h-28"><td class="lbl-c" colspan="2">Requested By</td><td class="lbl-c" colspan="2">Received By</td><td class="lbl-c" colspan="2">Coordinated By</td></tr>
+  <tr class="row-h-42"><td class="val-c" colspan="2">${esc(scr.requestedBy)}</td><td class="val-c" colspan="2">${esc(scr.receivedBy)}</td><td class="val-c" colspan="2">${esc(scr.coordinatedBy)}</td></tr>
+  <tr class="row-h-28"><td class="lbl-c" colspan="3">Department Name</td><td class="lbl-c" colspan="3">Department HOD</td></tr>
+  <tr class="row-h-42"><td class="val-c" colspan="3">${esc(scr.department)}</td><td class="val-c" colspan="3">${esc(scr.hodName)}</td></tr>
+</table>
+
+<table class="f page-break-before">
+  <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+  <tr><td class="sec" colspan="4">STUDY DETAILS</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">Study Done by</td><td class="lbl-c">Study Done by</td><td class="lbl-c">Study Date From</td><td class="lbl-c">Study Date To</td></tr>
+  <tr class="row-h-48"><td class="val-c">${esc(naIfEmpty(scr.studyDoneByPrimary))}</td><td class="val-c">${esc(naIfEmpty(scr.studyDoneBySecondary))}</td><td class="val-c">${fmt(scr.studyDateFrom)}</td><td class="val-c">${fmt(scr.studyDateTo)}</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">Assigned Developer 1</td><td class="lbl-c">Assigned Developer 2</td><td class="lbl-c">Assigned On</td><td class="lbl-c">Schedule On</td></tr>
+  <tr class="row-h-48"><td class="val-c">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</td><td class="val-c">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</td><td class="val-c">${fmt(scr.assignedOn)}</td><td class="val-c">${fmt(scr.scheduleDate)}</td></tr>
+  <tr class="row-h-28"><td class="lbl-c">Completed On</td><td colspan="3" style="background:#fff"></td></tr>
+  <tr class="row-h-42"><td class="val-c">${fmt(scr.completedOn)}</td><td colspan="3" style="background:#fff"></td></tr>
+</table>
+
+<table class="f">
+  <colgroup><col style="width:16%"><col style="width:17%"><col style="width:16%"><col style="width:17%"><col style="width:16%"><col style="width:18%"></colgroup>
+  <tr><td class="sec" colspan="6">APPROVALS</td></tr>
+  <tr class="row-h-28">
+    <td class="ap-approved">Approved</td><td class="ap-mark">${isApproved ? '✓' : ''}</td>
+    <td class="ap-rejected">Not Approved</td><td class="ap-mark">${isRejected ? '✓' : ''}</td>
+    <td class="ap-hold">Hold</td><td class="ap-mark">${isHold ? '✓' : ''}</td>
+  </tr>
+  <tr><td class="lbl" colspan="6" style="padding:0"><div class="clip" style="height:38px;background:#f4f4f4"><strong>Reason:</strong> ${esc(approvalReason)}</div></td></tr>
+  <tr class="row-h-28"><td class="lbl-c" colspan="2">Project Head</td><td class="lbl-c" colspan="2">AGM - IT</td><td class="lbl-c" colspan="2">Chief Information Officer</td></tr>
+  <tr>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.projectHeadName || 'Mr. Panneer Selvan')}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.agmItName || 'Mr. S. Saravanakumar')}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.cioName || 'Mr. Biju Velayudhan')}</div></td>
+  </tr>
+</table>
+
+<table class="f">
+  <tr><td class="sec">REMARKS</td></tr>
+  <tr><td class="area-sm" style="background:#fff"><div class="clip"><strong>Project Head Remarks:</strong> ${esc(scr.remarkProjectHead)}</div></td></tr>
+  <tr><td class="area-sm" style="background:#fff"><div class="clip"><strong>AGM IT Remarks:</strong> ${esc(scr.remarkAgmIt || agmDecision?.comments)}</div></td></tr>
+  <tr><td class="area-sm" style="background:#fff"><div class="clip"><strong>CIO Remarks:</strong> ${esc(scr.remarkCio || cioDecision?.comments)}</div></td></tr>
+</table>
+
+<table class="f note-body">
+  <tr><td class="sec">NOTE:</td></tr>
+  <tr><td><strong>Request Description:</strong> Describe the change being requested. Be as specific as possible. If appropriate include technical details, diagrams, and a 'before and after' description.</td></tr>
+  <tr><td><strong>Reasons for this Change:</strong> Request describe the reasons and the purposes of this request (what is the process or technical driver). Explain the impact of the change request on the Business Case.</td></tr>
+  <tr class="quote-row"><td>Behind every system change is a push for better healthcare delivery.</td></tr>
+</table>
+
+</div></body></html>`;
+}
+
+init();
+</script>
+</body>
+</html>

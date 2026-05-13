@@ -4,16 +4,27 @@
 
 const App = {
   // ── Initialize ──────────────────────────────────────────
-  init() {
-    // Seed data if first run
+  async init() {
+    // 1. Hydrate cache from the SQLite backend. Everything below
+    //    expects Store._cache to be populated.
+    try {
+      await Store.hydrate();
+    } catch (e) {
+      this.renderConnectionError(e);
+      return;
+    }
+
+    // 2. Boot batch: seed / migrate / heal write to the in-memory
+    //    cache only. At commit, changed collections are bulk-PUT to
+    //    the server in a single round-trip per collection.
+    Store.beginBootBatch();
     Store.seed();
-    // Backfill / rename legacy data in existing localStorage
     Store.migrate();
-    // Self-healing: re-derive PH/AGM/CIO names from workflow + approvals
-    // every load (idempotent — only writes if names actually differ)
+    Store.ensureDefaultUsers();
     Store.resyncReviewerNames();
-    // Trim old audit / notifications so quota stays healthy
     Store.pruneRoutine();
+    await Store.commitBootBatch();
+
     // Cross-tab sync — listen for session changes and storage events
     this._bindStorageSync();
 
@@ -103,6 +114,23 @@ const App = {
     if (typeof Auth.postRenderLogin === 'function') {
       setTimeout(() => Auth.postRenderLogin(), 60);
     }
+  },
+
+  // ── Render connection error (backend unreachable) ───────
+  renderConnectionError(e) {
+    const msg = (e && e.message) ? e.message : 'The SCR backend did not respond.';
+    document.getElementById('app').innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:var(--space-6);text-align:center;background:var(--color-bg-deepest)">
+        <div style="font-size:4rem;margin-bottom:var(--space-4)">🔌</div>
+        <h2 style="font-size:var(--font-2xl);margin-bottom:var(--space-3);color:var(--color-text-primary)">Cannot Connect to Server</h2>
+        <p class="text-secondary mb-4" style="max-width:520px;line-height:1.6">${Utils.escapeHtml(msg)}</p>
+        <p class="text-tertiary text-sm mb-6" style="max-width:520px;line-height:1.7">
+          The backend server must be running. On the host machine, open PowerShell and run:<br>
+          <code style="display:inline-block;padding:4px 10px;margin-top:6px;background:var(--color-bg-surface);border:1px solid var(--color-border);border-radius:6px;font-family:monospace;font-size:0.9em">cd server &amp;&amp; npm start</code>
+        </p>
+        <button class="btn btn-primary btn-lg" onclick="App.init()">↻ Retry</button>
+      </div>
+    `;
   },
 
   // ── Render App Shell ────────────────────────────────────

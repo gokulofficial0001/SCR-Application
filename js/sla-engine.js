@@ -122,10 +122,15 @@ const SLAEngine = {
   },
 
   // ── Average resolution time (hours) ─────────────────────
+  // Uses completedOn (the actual schema field). Falls back to updatedAt
+  // for closed SCRs that lack an explicit completedOn date.
   avgResolutionTime() {
-    const closed = Store.filter('scr_requests', s => s.status === 'Closed' && s.completionDate);
+    const closed = Store.filter('scr_requests', s =>
+      s.status === 'Closed' && (s.completedOn || s.updatedAt)
+    );
     if (closed.length === 0) return 0;
-    const total = closed.reduce((sum, scr) => sum + Utils.hoursBetween(scr.createdAt, scr.completionDate), 0);
+    const total = closed.reduce((sum, scr) =>
+      sum + Utils.hoursBetween(scr.createdAt, scr.completedOn || scr.updatedAt), 0);
     return Math.round(total / closed.length);
   }
 };
