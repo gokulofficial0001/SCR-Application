@@ -18,7 +18,16 @@
       "Bash(npm --version)",
       "PowerShell(npm.cmd --version)",
       "PowerShell(Invoke-RestMethod -Uri 'http://localhost:3500/api/admin/health' -Method GET)",
-      "PowerShell(Start-Sleep -Seconds 2; Invoke-RestMethod -Uri 'http://localhost:3500/api/admin/snapshot' | ConvertTo-Json -Compress | Select-String -Pattern '.{1,300}' | ForEach-Object { $_.Line.Substring\\(0, [Math]::Min\\(300, $_.Line.Length\\)\\) })"
+      "PowerShell(Start-Sleep -Seconds 2; Invoke-RestMethod -Uri 'http://localhost:3500/api/admin/snapshot' | ConvertTo-Json -Compress | Select-String -Pattern '.{1,300}' | ForEach-Object { $_.Line.Substring\\(0, [Math]::Min\\(300, $_.Line.Length\\)\\) })",
+      "Bash(git push *)",
+      "PowerShell(powershell.exe -ExecutionPolicy Bypass -File 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\workflow-e2e-test.ps1')",
+      "PowerShell(powershell.exe -ExecutionPolicy Bypass -File 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\dev-notify-test.ps1' 2>&1 | Select-Object -Last 12)",
+      "PowerShell(node --check 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\db.js' 2>&1)",
+      "PowerShell(if \\($LASTEXITCODE -eq 0\\) { 'db.js: syntax OK' })",
+      "PowerShell(node 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\write-queue-test.js' 2>&1)",
+      "PowerShell(node 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\consolidate-users.js' 2>&1)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

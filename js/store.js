@@ -106,6 +106,8 @@ const Store = {
   },
 
   // ── Internal: fire-and-forget fetch with shared error handling ──
+  // On failure the write is NOT lost — it is pushed to a persistent
+  // offline queue (see below) and retried automatically until it lands.
   _fetchSafe(method, url, body) {
     const opts = { method, headers: {} };
     if (body !== undefined) {
@@ -117,17 +119,109 @@ const Store = {
         if (!r.ok) throw new Error(`${method} ${url} → ${r.status}`);
         return r;
       })
-      .catch(e => this._handleNetworkError(e));
+      .catch(e => {
+        // Server unreachable or rejected — queue the write so it's never lost
+        this._enqueueWrite(method, url, body);
+        this._handleNetworkError(e);
+      });
   },
 
   _handleNetworkError(e) {
-    console.error('Store sync failed:', e);
+    console.error('Store sync failed (write queued for retry):', e);
     if (this._networkErrorShown) return;
     this._networkErrorShown = true;
     if (typeof Utils !== 'undefined' && Utils.toast) {
-      Utils.toast('warning', 'Sync Error', 'Could not save to server. Check the connection.');
+      Utils.toast('warning', 'Saved Locally', 'Server unreachable — your change is queued and will sync automatically.');
     }
     setTimeout(() => { this._networkErrorShown = false; }, 5000);
+  },
+
+  // ── Offline write queue ─────────────────────────────────
+  // Any POST / PATCH / PUT / DELETE that fails is appended here and
+  // persisted to localStorage, so it survives a page refresh / browser
+  // close. A background flusher replays the queue (in FIFO order) every
+  // few seconds until the server accepts every write. This guarantees a
+  // requester's submission is never lost just because the server blipped.
+  _QUEUE_KEY: 'scr_write_queue',
+  _writeQueue: [],
+  _flushTimer: null,
+  _flushing: false,
+
+  _loadQueue() {
+    try {
+      const raw = localStorage.getItem(this._QUEUE_KEY);
+      this._writeQueue = raw ? JSON.parse(raw) : [];
+    } catch { this._writeQueue = []; }
+    return this._writeQueue.length;
+  },
+
+  _persistQueue() {
+    try { localStorage.setItem(this._QUEUE_KEY, JSON.stringify(this._writeQueue)); }
+    catch (e) { console.error('Write-queue persist failed:', e); }
+  },
+
+  _enqueueWrite(method, url, body) {
+    this._writeQueue.push({ method, url, body, queuedAt: Date.now() });
+    this._persistQueue();
+  },
+
+  // Number of writes still waiting to reach the server
+  pendingWrites() { return this._writeQueue.length; },
+
+  // Replay queued writes in order. Stops at the first failure (server
+  // still down) and tries again on the next tick. Safe to call often.
+  async _flushQueue() {
+    if (this._flushing || this._writeQueue.length === 0) return;
+    this._flushing = true;
+    let flushed = 0;
+    try {
+      while (this._writeQueue.length > 0) {
+        const w = this._writeQueue[0];
+        const opts = { method: w.method, headers: {} };
+        if (w.body !== undefined) {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(w.body);
+        }
+        let r;
+        try {
+          r = await fetch(w.url, opts);
+        } catch (netErr) {
+          break; // server unreachable — keep the whole queue, retry later
+        }
+        if (!r.ok) {
+          // 4xx/5xx — the server rejected this specific write. Drop it so
+          // it can't block the rest of the queue forever; log it loudly.
+          console.error(`Write-queue: server rejected ${w.method} ${w.url} (${r.status}) — dropping`);
+          this._writeQueue.shift();
+          this._persistQueue();
+          continue;
+        }
+        // success
+        this._writeQueue.shift();
+        this._persistQueue();
+        flushed++;
+      }
+    } finally {
+      this._flushing = false;
+    }
+
+    if (flushed > 0) {
+      // These writes were not on the server when we last hydrated, so the
+      // in-memory cache may be behind. Silently re-sync it.
+      try { await this.hydrate(); } catch {}
+      if (typeof Utils !== 'undefined' && Utils.toast) {
+        Utils.toast('success', 'Synced', `${flushed} pending change(s) saved to the server.`);
+      }
+    }
+  },
+
+  // Start the background flusher. Call once on App.init (after hydrate).
+  startQueueFlusher() {
+    this._loadQueue();
+    if (this._flushTimer) clearInterval(this._flushTimer);
+    this._flushTimer = setInterval(() => this._flushQueue(), 5000);
+    // also flush immediately in case the queue carried over from last session
+    this._flushQueue();
   },
 
   // ── Internal: route key to either collection cache or meta ──

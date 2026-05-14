@@ -12,23 +12,24 @@ const Utils = {
     return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
   },
 
-  // Robust SCR number — parse actual sequence numbers to find max, not count
-  // Prevents collisions if an SCR is deleted or a year appears in a description
+  // ── SCR number = a plain incrementing series ────────────
+  // The real-world paper SCR series is at #145, so the system continues
+  // from 146. To shift the starting point later, change SCR_SERIES_START.
+  // Only purely-numeric scrNumbers count toward the max — any legacy
+  // "SCR-YYYY-NNNN" values are ignored, so the new series isn't affected.
+  SCR_SERIES_START: 146,
+
   generateSCRNumber() {
-    const year = new Date().getFullYear();
     const existing = Store.getAll('scr_requests');
-    const pattern = new RegExp(`^SCR-${year}-(\\d+)$`);
-    let maxSeq = 0;
+    let maxSeq = this.SCR_SERIES_START - 1;  // first generated number = SCR_SERIES_START
     existing.forEach(s => {
-      if (!s.scrNumber) return;
-      const m = s.scrNumber.match(pattern);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (!isNaN(n) && n > maxSeq) maxSeq = n;
+      const raw = (s && s.scrNumber != null) ? String(s.scrNumber).trim() : '';
+      if (/^\d+$/.test(raw)) {
+        const n = parseInt(raw, 10);
+        if (n > maxSeq) maxSeq = n;
       }
     });
-    const seq = (maxSeq + 1).toString().padStart(4, '0');
-    return `SCR-${year}-${seq}`;
+    return String(maxSeq + 1);
   },
 
   // ── Validation helpers ─────────────────────────────────

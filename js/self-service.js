@@ -487,7 +487,7 @@ const SelfService = {
         </div>
         <div class="card-body">
           <div class="flex gap-3">
-            <input type="text" class="form-input" id="track-input" placeholder="Enter SCR number (e.g., SCR-2026-0001)" style="max-width:350px">
+            <input type="text" class="form-input" id="track-input" placeholder="Enter SCR number (e.g., 146)" style="max-width:350px">
             <button class="btn btn-primary" onclick="SelfService.trackSCR()">Track</button>
           </div>
           <div id="track-result"></div>

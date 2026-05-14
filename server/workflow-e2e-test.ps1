@@ -37,14 +37,17 @@ STEP 0 "Reset DB + seed users/departments/SLA"
 
 Invoke-RestMethod -Uri "$api/admin/reset" -Method POST | Out-Null
 
+# IMPORTANT: use the SAME canonical user IDs as Store.ensureDefaultUsers()
+# (user_dev1 / user_req1, not user_dev / user_req) so that a browser load
+# after this test does not create duplicate user records.
 $users = @(
   @{ id='user_admin'; name='System Admin';         username='admin';       password='admin123'; role='admin';          email='admin@h.in';     department='Information Technology' },
   @{ id='user_impl';  name='Mrs. Saranya P';       username='impl';        password='impl123';  role='implementation'; email='saranya.p@h.in'; department='Information Technology' },
   @{ id='user_ph';    name='Mr. Panneer Selvan';   username='projecthead'; password='ph123';    role='project_head';   email='panneer@h.in';   department='Information Technology' },
   @{ id='user_agm';   name='Mr. S. Saravanakumar'; username='agm';         password='agm123';   role='agm_it';         email='agm@h.in';       department='Information Technology' },
   @{ id='user_cio';   name='Mr. Biju Velayudhan';  username='cio';         password='cio123';   role='cio';            email='cio@h.in';       department='Information Technology' },
-  @{ id='user_dev';   name='Mrs. Saranya R';       username='developer';   password='dev123';   role='developer';      email='saranya.r@h.in'; department='Information Technology' },
-  @{ id='user_req';   name='Dr. Ramesh Kumar';     username='requester';   password='req123';   role='requester';      email='ramesh@h.in';    department='Cardiology' }
+  @{ id='user_dev1';  name='Mrs. Saranya R';       username='developer';   password='dev123';   role='developer';      email='saranya.r@h.in'; department='Information Technology' },
+  @{ id='user_req1';  name='Dr. Ramesh Kumar';     username='requester';   password='req123';   role='requester';      email='ramesh@h.in';    department='Cardiology' }
 )
 PUT 'users' $users | Out-Null
 OK ("Seeded {0} users" -f $users.Count)
@@ -115,7 +118,7 @@ $scr = @{
   assignedTeam = ''
   currentStage = 1
   status = 'Open'
-  createdBy = 'user_req'
+  createdBy = 'user_req1'
   lastRejection = $null
   rejectionRemarks = ''
   rejectedBy = ''
@@ -129,7 +132,7 @@ $scr = @{
 POST 'scr_requests' $scr | Out-Null
 OK "Created $scrNumber at Stage 1, status=Open"
 
-$wf1 = @{ id="wf_e2e_1"; scrId=$scrId; stage=1; enteredAt=(NOW); exitedAt=$null; performedBy='user_req'; action='Submitted'; notes='SCR submitted by Dr. Ramesh Kumar' }
+$wf1 = @{ id="wf_e2e_1"; scrId=$scrId; stage=1; enteredAt=(NOW); exitedAt=$null; performedBy='user_req1'; action='Submitted'; notes='SCR submitted by Dr. Ramesh Kumar' }
 POST 'workflow_stages' $wf1 | Out-Null
 POST 'audit_log' @{ id="aud_e2e_1"; entityType='SCR'; entityId=$scrId; action='Created'; field=$null; oldValue=$null; newValue=$scrNumber; performedBy='Dr. Ramesh Kumar'; role='requester'; timestamp=(NOW) } | Out-Null
 
@@ -181,12 +184,12 @@ STEP 5 "PH assigns developer + advances to Mgmt Approval (3 to 4)"
 PATCH "workflow_stages/wf_e2e_3" @{ exitedAt=(NOW); exitedBy='user_ph'; action='Completed' } | Out-Null
 $wf4 = @{ id="wf_e2e_4"; scrId=$scrId; stage=4; enteredAt=(NOW); exitedAt=$null; performedBy='user_ph'; action='In Progress'; notes='Advanced by Mr. Panneer Selvan' }
 POST 'workflow_stages' $wf4 | Out-Null
-PATCH "scr_requests/$scrId" @{ currentStage=4; assignedDeveloper='user_dev'; assignedOn=(TODAY); projectHeadName='Mr. Panneer Selvan' } | Out-Null
+PATCH "scr_requests/$scrId" @{ currentStage=4; assignedDeveloper='user_dev1'; assignedOn=(TODAY); projectHeadName='Mr. Panneer Selvan' } | Out-Null
 POST 'audit_log' @{ id="aud_e2e_6"; entityType='SCR'; entityId=$scrId; action='Stage Advanced'; field='currentStage'; oldValue='Project Head Review'; newValue='Management Approval'; performedBy='Mr. Panneer Selvan'; role='project_head'; timestamp=(NOW) } | Out-Null
 
 $scr = GET "scr_requests/$scrId"
 if ($scr.currentStage -ne 4) { FAIL "Expected stage 4, got $($scr.currentStage)" }
-if ($scr.assignedDeveloper -ne 'user_dev') { FAIL "Developer not assigned" }
+if ($scr.assignedDeveloper -ne 'user_dev1') { FAIL "Developer not assigned" }
 OK "Stage 4 (assignedDeveloper=$($scr.assignedDeveloper))"
 
 # =====================================================================
@@ -218,15 +221,15 @@ OK "Both approved -- advanced to Stage 5 (Development)"
 STEP 7 "Developer acknowledges + posts dev updates"
 # =====================================================================
 
-PATCH "scr_requests/$scrId" @{ acknowledgedBy='user_dev'; acknowledgedAt=(NOW) } | Out-Null
+PATCH "scr_requests/$scrId" @{ acknowledgedBy='user_dev1'; acknowledgedAt=(NOW) } | Out-Null
 POST 'audit_log' @{ id="aud_e2e_10"; entityType='SCR'; entityId=$scrId; action='Acknowledged'; field='acknowledgedBy'; oldValue=$null; newValue='Mrs. Saranya R'; performedBy='Mrs. Saranya R'; role='developer'; timestamp=(NOW) } | Out-Null
 
 $scr = GET "scr_requests/$scrId"
-if ($scr.acknowledgedBy -ne 'user_dev') { FAIL "acknowledgedBy not set" }
+if ($scr.acknowledgedBy -ne 'user_dev1') { FAIL "acknowledgedBy not set" }
 OK "Developer acknowledged"
 
-POST 'development_updates' @{ id="du_e2e_1"; scrId=$scrId; authorId='user_dev'; authorName='Mrs. Saranya R'; title='Frontend UI complete'; description='Token display rendered with CSS animations'; status='In Progress'; percentComplete=50; timestamp=(NOW) } | Out-Null
-POST 'development_updates' @{ id="du_e2e_2"; scrId=$scrId; authorId='user_dev'; authorName='Mrs. Saranya R'; title='Backend API'; description='Token API integrated with HIS'; status='Completed'; percentComplete=100; timestamp=(NOW) } | Out-Null
+POST 'development_updates' @{ id="du_e2e_1"; scrId=$scrId; authorId='user_dev1'; authorName='Mrs. Saranya R'; title='Frontend UI complete'; description='Token display rendered with CSS animations'; status='In Progress'; percentComplete=50; timestamp=(NOW) } | Out-Null
+POST 'development_updates' @{ id="du_e2e_2"; scrId=$scrId; authorId='user_dev1'; authorName='Mrs. Saranya R'; title='Backend API'; description='Token API integrated with HIS'; status='Completed'; percentComplete=100; timestamp=(NOW) } | Out-Null
 
 $ups = @((GET 'development_updates') | Where-Object { $_.scrId -eq $scrId })
 if ($ups.Count -ne 2) { FAIL "Expected 2 dev updates, got $($ups.Count)" }
@@ -236,8 +239,8 @@ OK "Posted $($ups.Count) dev updates (avg progress 75%)"
 STEP 8 "Developer submits to QA (Stage 5 to 6)"
 # =====================================================================
 
-PATCH "workflow_stages/wf_e2e_5" @{ exitedAt=(NOW); exitedBy='user_dev'; action='Completed' } | Out-Null
-$wf6 = @{ id="wf_e2e_6"; scrId=$scrId; stage=6; enteredAt=(NOW); exitedAt=$null; performedBy='user_dev'; action='In Progress'; notes='Submitted to QA by Mrs. Saranya R' }
+PATCH "workflow_stages/wf_e2e_5" @{ exitedAt=(NOW); exitedBy='user_dev1'; action='Completed' } | Out-Null
+$wf6 = @{ id="wf_e2e_6"; scrId=$scrId; stage=6; enteredAt=(NOW); exitedAt=$null; performedBy='user_dev1'; action='In Progress'; notes='Submitted to QA by Mrs. Saranya R' }
 POST 'workflow_stages' $wf6 | Out-Null
 PATCH "scr_requests/$scrId" @{ currentStage=6 } | Out-Null
 POST 'audit_log' @{ id="aud_e2e_11"; entityType='SCR'; entityId=$scrId; action='Stage Advanced'; field='currentStage'; oldValue='Development'; newValue='QA & Closure'; performedBy='Mrs. Saranya R'; role='developer'; timestamp=(NOW) } | Out-Null
@@ -263,7 +266,7 @@ OK "SCR Closed (completedOn=$($scr.completedOn))"
 STEP 10 "Requester submits feedback on closed SCR"
 # =====================================================================
 
-POST 'feedback' @{ id="fb_e2e_1"; scrId=$scrId; q1=5; q2=4; q3=5; q4=4; q5=5; avgScore=4.6; comments='Quick and clean delivery!'; submittedBy='user_req'; timestamp=(NOW) } | Out-Null
+POST 'feedback' @{ id="fb_e2e_1"; scrId=$scrId; q1=5; q2=4; q3=5; q4=4; q5=5; avgScore=4.6; comments='Quick and clean delivery!'; submittedBy='user_req1'; timestamp=(NOW) } | Out-Null
 POST 'audit_log' @{ id="aud_e2e_13"; entityType='SCR'; entityId=$scrId; action='Feedback Submitted'; field='avgScore'; oldValue=$null; newValue='4.6'; performedBy='Dr. Ramesh Kumar'; role='requester'; timestamp=(NOW) } | Out-Null
 
 $fbs = @((GET 'feedback') | Where-Object { $_.scrId -eq $scrId })

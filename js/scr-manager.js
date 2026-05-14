@@ -418,6 +418,7 @@ const SCRManager = {
           ${Workflow.canResume(scr) ? `<button class="btn btn-success btn-sm" onclick="SCRManager.handleResumeStage('${scr.id}')" title="Lift the hold and continue review">▶ Resume</button>` : ''}
           ${Workflow.canClose(scr) ? `<button class="btn btn-success" onclick="SCRManager.handleCloseTicket('${scr.id}')">✓ Close Ticket</button>` : ''}
           ${canAdvance ? `<button class="btn btn-primary" onclick="SCRManager.handleAdvanceStage('${scr.id}')">${Workflow.getAdvanceLabel(scr.currentStage)}</button>` : ''}
+          ${Auth.canPerformAction('delete_scr') ? `<button class="btn btn-danger" onclick="SCRManager.handleDeleteSCR('${scr.id}')" title="Admin only — permanently delete this SCR and all its history">🗑️ Delete SCR</button>` : ''}
         </div>
       </div>
 
@@ -997,6 +998,44 @@ const SCRManager = {
     } else {
       Utils.toast('error', 'Error', result.error);
     }
+  },
+
+  // ── Handle delete SCR (admin only) ──────────────────────
+  // Permanently removes the SCR. Store.remove cascades on the server +
+  // in the cache: workflow_stages, approvals, feedback, notifications
+  // and development_updates for this SCR are all purged. The audit_log
+  // is preserved (NABH — historic trail must survive).
+  async handleDeleteSCR(scrId) {
+    if (!Auth.canPerformAction('delete_scr')) {
+      Utils.toast('error', 'Not Allowed', 'Only an administrator can delete an SCR.');
+      return;
+    }
+    const scr = Store.getById('scr_requests', scrId);
+    if (!scr) { Utils.toast('error', 'Not Found', 'SCR no longer exists.'); return; }
+
+    const childCount =
+      Store.filter('workflow_stages', w => w.scrId === scrId).length +
+      Store.filter('approvals', a => a.scrId === scrId).length +
+      Store.filter('feedback', f => f.scrId === scrId).length +
+      Store.filter('development_updates', d => d.scrId === scrId).length;
+
+    const confirmed = await Utils.confirm(
+      'Delete this SCR?',
+      `${scr.scrNumber} — "${Utils.truncate(scr.moduleName || scr.description || '', 60)}"\n\n` +
+      `This permanently deletes the SCR and ${childCount} linked record(s) ` +
+      `(workflow history, approvals, feedback, dev updates). The audit trail is kept. ` +
+      `This cannot be undone.`,
+      'danger'
+    );
+    if (!confirmed) return;
+
+    const user = Auth.currentUser();
+    Store.remove('scr_requests', scrId);
+    Audit.log('SCR', scrId, 'Deleted', 'scrNumber', scr.scrNumber, null,
+      user ? user.name : 'Admin', user ? user.role : 'admin');
+
+    Utils.toast('success', 'SCR Deleted', `${scr.scrNumber} and its linked records were removed.`);
+    Router.navigate('scr-list');
   },
 
   // ── Render Create/Edit Form (10-Section role-based) ─────

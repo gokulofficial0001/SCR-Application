@@ -11,6 +11,16 @@ const raw = new DatabaseSync(DB_PATH);
 raw.exec('PRAGMA journal_mode = WAL');
 raw.exec('PRAGMA foreign_keys = ON');
 
+// Periodic WAL checkpoint — merges the -wal sidecar into the main scr.db
+// file every 30s. Without this the server holds the connection open
+// indefinitely, the -wal grows unbounded, and external tools (DB Browser,
+// TOAD) that read scr.db directly see stale, pre-checkpoint data.
+const checkpointTimer = setInterval(() => {
+  try { raw.exec('PRAGMA wal_checkpoint(TRUNCATE)'); }
+  catch (e) { console.error('WAL checkpoint failed:', e.message); }
+}, 30000);
+checkpointTimer.unref();  // don't keep the process alive on the timer alone
+
 const db = {
   _raw: raw,
   exec: (sql) => raw.exec(sql),

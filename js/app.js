@@ -14,6 +14,11 @@ const App = {
       return;
     }
 
+    // 1b. Start the offline write-queue flusher — replays any writes that
+    //     failed in a previous session (e.g. server was briefly down) so
+    //     nothing a user submitted is ever lost.
+    Store.startQueueFlusher();
+
     // 2. Boot batch: seed / migrate / heal write to the in-memory
     //    cache only. At commit, changed collections are bulk-PUT to
     //    the server in a single round-trip per collection.

@@ -18,6 +18,17 @@ This installs Express and CORS only. SQLite is built into Node 22.5+ — no sepa
 
 ## Run the server
 
+### Recommended: double-click the launcher
+
+**`start-scr-server.bat`** — double-click it. It:
+1. Kills any stale/zombie process still holding port 3500 (fixes the "server appears down but won't restart" problem)
+2. Starts the Node server in its own console window
+3. Keep that window open while the app is in use; close it (or Ctrl+C) to stop the server cleanly
+
+This is the reliable way — the server runs independently and the launcher self-heals the port.
+
+### Alternative: npm
+
 ```powershell
 npm start
 ```
@@ -36,9 +47,60 @@ The server serves both:
 - **Static files** — your existing `index.html`, `js/`, `css/` (so the app keeps working at the same URL)
 - **REST API** — `/api/*` endpoints backed by SQLite
 
-## Stopping the existing PowerShell server first
+## "Server is down" / `EADDRINUSE` — the zombie-process fix
 
-If `serve.ps1` is still running on port 3500, stop it before starting the Node server (Ctrl+C in its terminal). Both can't bind to 3500 at the same time.
+If the site stops responding but a Node process is still alive, a previous
+server instance got orphaned and is squatting on port 3500. Two fixes:
+
+- **Easiest:** just double-click **`start-scr-server.bat`** — it kills the
+  stale process automatically before starting fresh.
+- **Manual:** find and kill it —
+  ```powershell
+  Get-NetTCPConnection -LocalPort 3500 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+  ```
+
+## Auto-start + self-restart (ALREADY SET UP)
+
+The server is configured to **auto-start on logon** and **restart itself if
+it ever crashes**. Two pieces make this work:
+
+### 1. `watchdog-server.bat` — the self-healing launcher
+
+A loop that:
+- Kills any stale/zombie process on port 3500 (fixes `EADDRINUSE`)
+- Starts the Node server
+- If the server stops or crashes, waits 5s and restarts it — forever
+- Appends all output to `watchdog.log`
+
+You can double-click it any time to run the server manually.
+
+### 2. Startup-folder shortcut — auto-start on logon
+
+A shortcut named **"SCR Server"** lives in your Startup folder
+(`shell:startup`). Every time you log into Windows, it launches
+`watchdog-server.bat` minimized. No admin rights needed.
+
+→ **Result:** the server comes up on login and stays up. If it crashes,
+the watchdog brings it back within 5 seconds.
+
+### Optional: start at BOOT (before login) — needs admin
+
+The startup shortcut runs at *logon*. To run even earlier — at system
+*boot*, before anyone logs in (best for an always-on server):
+
+1. Right-click **`install-autostart.bat`** → **Run as administrator**
+2. It registers a SYSTEM scheduled task "SCR Server" (`/SC ONSTART`)
+3. To start it immediately without rebooting: `schtasks /Run /TN "SCR Server"`
+
+To remove either auto-start later: run **`uninstall-autostart.bat`**
+(as admin if you used the boot-level task), or delete the "SCR Server"
+shortcut from `shell:startup`.
+
+### Checking it's running
+
+- Visit http://localhost:3500/api/admin/health
+- Or look for the minimized **"SCR Server (watchdog…)"** window in the taskbar
+- Or check `server/watchdog.log` for the start/restart history
 
 ## Verifying the API works
 
