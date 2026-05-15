@@ -39,69 +39,100 @@ const Auth = {
   _failedAttempts: {},
   _lockoutUntil: {},
 
-  // ── Login ───────────────────────────────────────────────
-  login(username, password) {
+  // ── Login (server-backed) ───────────────────────────────
+  // Calls POST /api/auth/login. On success the server returns an opaque
+  // bearer token that Store attaches to every subsequent /api request.
+  // Client-side 5-attempt lockout kept as a UX nicety; the AUTHORITATIVE
+  // brute-force defence is the server's express-rate-limit on the route.
+  async login(username, password) {
     if (!username || !password) {
       return { success: false, error: 'Username and password required' };
     }
     const key = username.toLowerCase().trim();
 
-    // Lockout check — 5 failed attempts → 60s cooldown
     const until = this._lockoutUntil[key] || 0;
     if (until > Date.now()) {
       const wait = Math.ceil((until - Date.now()) / 1000);
       return { success: false, error: `Too many attempts. Try again in ${wait}s.` };
     }
 
-    const users = Store.getAll('users');
-    const user = users.find(u =>
-      u.username.toLowerCase() === key && u.password === password
-    );
-    if (!user) {
+    let res, data;
+    try {
+      res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (e) {
+      return { success: false, error: 'Cannot reach the server. Check that it is running.' };
+    }
+
+    if (!res.ok) {
       this._failedAttempts[key] = (this._failedAttempts[key] || 0) + 1;
       if (this._failedAttempts[key] >= 5) {
         this._lockoutUntil[key] = Date.now() + 60 * 1000;
         this._failedAttempts[key] = 0;
-        // Log lockout event for audit
-        Audit.log('User', key, 'Login Blocked', null, null, 'Too many attempts', key, 'anonymous');
       }
-      return { success: false, error: 'Invalid username or password' };
+      return { success: false, error: (data && data.error) || 'Invalid username or password' };
     }
 
-    // Success — clear any rate-limit state
+    // Success — clear rate-limit state, store session + token
     delete this._failedAttempts[key];
     delete this._lockoutUntil[key];
 
     const session = {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      role: user.role,
-      email: user.email,
-      department: user.department,
+      ...data.user,
+      token: data.token,
+      expiresAt: data.expiresAt,
       loginAt: Utils.nowISO()
     };
-
     Store.setSession(session);
-
-    // Audit log
-    Audit.log('User', user.id, 'Login', null, null, null, user.name, user.role);
+    Store.setAuthToken(data.token);
 
     return { success: true, user: session };
   },
 
   // ── Logout ──────────────────────────────────────────────
-  logout() {
+  async logout() {
     const session = this.currentUser();
-    if (session) {
-      Audit.log('User', session.id, 'Logout', null, null, null, session.name, session.role);
+    if (session && session.token) {
+      // Best-effort server-side token invalidation — never block on it
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.token}` }
+        });
+      } catch {}
     }
     Store.clearSession();
-    // Close notification panel if open
+    Store.setAuthToken(null);
     const panel = document.getElementById('notif-panel');
     if (panel) panel.remove();
     Notifications.panelOpen = false;
     App.init();
+  },
+
+  // ── Validate an existing session token against the server ──
+  // Called on app boot to confirm a stored token is still alive (not
+  // expired / revoked). Returns true if the token is valid; on success
+  // also refreshes the session with the latest user record from server.
+  async validateToken() {
+    const session = this.currentUser();
+    if (!session || !session.token) return false;
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${session.token}` }
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data && data.user) {
+        Store.setSession({ ...session, ...data.user, expiresAt: data.expiresAt });
+      }
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   // ── Current User ────────────────────────────────────────
@@ -413,31 +444,42 @@ const Auth = {
   },
 
   // ── Handle login form ──────────────────────────────────
-  handleLogin(e) {
+  async handleLogin(e) {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
+    const btn = document.getElementById('login-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
 
-    const result = Auth.login(username, password);
+    const result = await Auth.login(username, password);
     if (result.success) {
       Utils.toast('success', 'Welcome!', `Signed in as ${result.user.name}`);
       App.init();
     } else {
       const errEl = document.getElementById('login-error');
-      errEl.textContent = result.error;
-      errEl.classList.remove('hidden');
+      if (errEl) {
+        errEl.textContent = result.error;
+        errEl.classList.remove('hidden');
+      }
       document.getElementById('login-password').value = '';
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
     }
   },
 
   // ── Quick login for demo ────────────────────────────────
-  quickLogin(username, password) {
+  async quickLogin(username, password) {
     document.getElementById('login-username').value = username;
     document.getElementById('login-password').value = password;
-    const result = Auth.login(username, password);
+    const result = await Auth.login(username, password);
     if (result.success) {
       Utils.toast('success', 'Welcome!', `Signed in as ${result.user.name}`);
       App.init();
+    } else {
+      const errEl = document.getElementById('login-error');
+      if (errEl) {
+        errEl.textContent = result.error;
+        errEl.classList.remove('hidden');
+      }
     }
   }
 };

@@ -21,6 +21,44 @@ const checkpointTimer = setInterval(() => {
 }, 30000);
 checkpointTimer.unref();  // don't keep the process alive on the timer alone
 
+// ── Automated daily backup ─────────────────────────────────
+// Copies scr.db to data/backups/scr-YYYY-MM-DD.db; keeps last 30 days.
+// Runs once at boot (if today's backup is missing) and then every 24h.
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_KEEP_DAYS = 30;
+
+function runBackup() {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    // Checkpoint first so the file we copy reflects the latest writes
+    try { raw.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {}
+    const ts = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const target = path.join(BACKUP_DIR, `scr-${ts}.db`);
+    fs.copyFileSync(DB_PATH, target);
+
+    // Retention — keep only the most recent N day-stamped backups
+    const all = fs.readdirSync(BACKUP_DIR)
+      .filter(f => /^scr-\d{4}-\d{2}-\d{2}\.db$/.test(f))
+      .sort();
+    while (all.length > BACKUP_KEEP_DAYS) {
+      const old = all.shift();
+      try { fs.unlinkSync(path.join(BACKUP_DIR, old)); } catch {}
+    }
+    console.log(`[backup] ${target}  (${all.length} kept)`);
+  } catch (e) {
+    console.error('[backup] failed:', e.message);
+  }
+}
+
+// Initial backup at boot if today's file doesn't already exist
+try {
+  const todayBackup = path.join(BACKUP_DIR, `scr-${new Date().toISOString().split('T')[0]}.db`);
+  if (!fs.existsSync(todayBackup)) runBackup();
+} catch {}
+
+const backupTimer = setInterval(runBackup, 24 * 60 * 60 * 1000);
+backupTimer.unref();
+
 const db = {
   _raw: raw,
   exec: (sql) => raw.exec(sql),
@@ -70,6 +108,21 @@ db.exec(`
     updated_at TEXT
   );
 `);
+
+// Server-issued session tokens — used by /api/auth/* + the requireAuth
+// middleware to authenticate every API request.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_role TEXT NOT NULL,
+    user_name TEXT,
+    created_at TEXT,
+    expires_at TEXT
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_exp ON sessions (expires_at);`);
 
 for (const coll of ['workflow_stages', 'approvals', 'feedback', 'notifications', 'development_updates', 'audit_log']) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_${coll}_scr ON ${coll} (json_extract(data, '$.scrId'));`);

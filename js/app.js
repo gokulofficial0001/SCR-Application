@@ -4,24 +4,37 @@
 
 const App = {
   // ── Initialize ──────────────────────────────────────────
+  // Two-phase boot:
+  //   1. Validate any stored session token against /api/auth/me
+  //   2a. If valid → full boot (hydrate + seed/heal + render shell)
+  //   2b. If no/invalid token → render login page only (no hydrate)
+  // /api/admin/snapshot now requires auth — we must NOT hydrate before
+  // a token is in hand, or the call 401s and the app shows an error.
   async init() {
-    // 1. Hydrate cache from the SQLite backend. Everything below
-    //    expects Store._cache to be populated.
+    this._bindStorageSync();   // idempotent — first thing so cross-tab works
+
+    const session = Auth.currentUser();
+    if (session && session.token) {
+      Store.setAuthToken(session.token);
+      const valid = await Auth.validateToken().catch(() => false);
+      if (valid) return this._fullBoot();
+      // Token is dead — fall through to login
+      Store.clearSession();
+      Store.setAuthToken(null);
+    }
+    this.renderLogin();
+  },
+
+  // ── Full boot (only after a valid session) ──────────────
+  async _fullBoot() {
     try {
       await Store.hydrate();
     } catch (e) {
       this.renderConnectionError(e);
       return;
     }
-
-    // 1b. Start the offline write-queue flusher — replays any writes that
-    //     failed in a previous session (e.g. server was briefly down) so
-    //     nothing a user submitted is ever lost.
     Store.startQueueFlusher();
 
-    // 2. Boot batch: seed / migrate / heal write to the in-memory
-    //    cache only. At commit, changed collections are bulk-PUT to
-    //    the server in a single round-trip per collection.
     Store.beginBootBatch();
     Store.seed();
     Store.migrate();
@@ -30,38 +43,17 @@ const App = {
     Store.pruneRoutine();
     await Store.commitBootBatch();
 
-    // Cross-tab sync — listen for session changes and storage events
-    this._bindStorageSync();
-
-    // Check authentication
-    if (!Auth.isLoggedIn()) {
-      this.renderLogin();
-      return;
-    }
-
     const urlParams = new URL(window.location.href).searchParams;
-
-    // Minimal mode — opened from Home's Track / Feedback cards in a new tab.
-    // Stripped-down shell showing only the requested section.
     const minimalAction = urlParams.get('minimal');
     if (minimalAction) {
       this.renderMinimal(minimalAction);
       return;
     }
 
-    // Render full app shell (sidebar + header + everything)
     this.renderShell();
-
-    // Normal flow — clear any stale same-tab submission flag so it
-    // can't incorrectly trigger the success modal on an unrelated SCR.
-    // The flag is now set by SelfService.openInNewWindow at click time.
     sessionStorage.removeItem('scr-new-tab-flow');
-
-    // Normal flow — navigate to the user's default page
     const defaultPage = Auth.getDefaultPage();
     Router.navigate(defaultPage);
-
-    // Update notification badge
     Notifications.updateBadge();
 
     // Run SLA check

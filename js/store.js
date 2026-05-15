@@ -24,10 +24,19 @@ const Store = {
   _bootBatch: false,   // when true, mutations defer server writes
   _bootDirty: { collections: new Set(), meta: new Set() },
   _networkErrorShown: false,
+  _authToken: null,    // Bearer token sent on every API request (set by Auth.login)
+
+  // ── Auth token plumbing ─────────────────────────────────
+  setAuthToken(token) { this._authToken = token || null; },
+  getAuthToken()      { return this._authToken; },
 
   // ── Hydrate from server (call once on App.init) ─────────
   async hydrate() {
-    const res = await fetch('/api/admin/snapshot', { cache: 'no-store' });
+    const res = await fetch('/api/admin/snapshot', {
+      cache: 'no-store',
+      headers: this._authToken ? { 'Authorization': `Bearer ${this._authToken}` } : {}
+    });
+    if (res.status === 401) throw new Error('Authentication required');
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const snap = await res.json();
 
@@ -63,15 +72,16 @@ const Store = {
         if (raw) payload._meta[k] = JSON.parse(raw);
       } catch {}
     }
+    const headers = { 'Content-Type': 'application/json' };
+    if (this._authToken) headers['Authorization'] = `Bearer ${this._authToken}`;
     const res = await fetch('/api/admin/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      method: 'POST', headers, body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error(`Migration import failed: ${res.status}`);
 
     // Reload from server so cache reflects post-import state
-    const snap = await (await fetch('/api/admin/snapshot', { cache: 'no-store' })).json();
+    const reHeaders = this._authToken ? { 'Authorization': `Bearer ${this._authToken}` } : {};
+    const snap = await (await fetch('/api/admin/snapshot', { cache: 'no-store', headers: reHeaders })).json();
     this._cache = {};
     this.COLLECTIONS.forEach(c => { this._cache[c] = Array.isArray(snap[c]) ? snap[c] : []; });
     this._meta = (snap && snap._meta) || {};
@@ -106,24 +116,58 @@ const Store = {
   },
 
   // ── Internal: fire-and-forget fetch with shared error handling ──
-  // On failure the write is NOT lost — it is pushed to a persistent
-  // offline queue (see below) and retried automatically until it lands.
+  // Sends the bearer token (if any). Handles three outcome classes:
+  //   • Success                       → resolve
+  //   • Network error / 5xx           → enqueue + retry (transient)
+  //   • 401 unauthorized              → force-logout, do NOT queue
+  //   • 403 / other 4xx (bad request) → toast error, do NOT queue
   _fetchSafe(method, url, body) {
     const opts = { method, headers: {} };
+    if (this._authToken) opts.headers['Authorization'] = `Bearer ${this._authToken}`;
     if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     return fetch(url, opts)
       .then(r => {
-        if (!r.ok) throw new Error(`${method} ${url} → ${r.status}`);
+        if (r.status === 401) {
+          this._handle401();
+          const e = new Error('401'); e._noQueue = true; throw e;
+        }
+        if (r.status === 403) {
+          if (typeof Utils !== 'undefined' && Utils.toast) {
+            Utils.toast('error', 'Not Allowed', 'You do not have permission for that action.');
+          }
+          const e = new Error('403'); e._noQueue = true; throw e;
+        }
+        if (r.status >= 400 && r.status < 500) {
+          // 4xx (e.g. validation reject) — won't succeed on retry
+          const e = new Error(`${method} ${url} -> ${r.status}`); e._noQueue = true; throw e;
+        }
+        if (!r.ok) throw new Error(`${method} ${url} -> ${r.status}`);  // 5xx → queue
         return r;
       })
       .catch(e => {
-        // Server unreachable or rejected — queue the write so it's never lost
-        this._enqueueWrite(method, url, body);
-        this._handleNetworkError(e);
+        if (!e._noQueue) {
+          this._enqueueWrite(method, url, body);
+          this._handleNetworkError(e);
+        } else {
+          console.warn('Store sync rejected (not queued):', e.message);
+        }
       });
+  },
+
+  // Triggered when any /api/* call returns 401. Tears the session down
+  // cleanly so the next App.init shows the login page.
+  _handle401() {
+    this._authToken = null;
+    try { localStorage.removeItem('scr_session'); } catch {}
+    if (typeof Utils !== 'undefined' && Utils.toast) {
+      Utils.toast('warning', 'Session Expired', 'Please log in again.');
+    }
+    // Stop the queue flusher — there's no point retrying without a token
+    if (this._flushTimer) { clearInterval(this._flushTimer); this._flushTimer = null; }
+    setTimeout(() => { if (typeof App !== 'undefined' && App.init) App.init(); }, 100);
   },
 
   _handleNetworkError(e) {
@@ -178,6 +222,7 @@ const Store = {
       while (this._writeQueue.length > 0) {
         const w = this._writeQueue[0];
         const opts = { method: w.method, headers: {} };
+        if (this._authToken) opts.headers['Authorization'] = `Bearer ${this._authToken}`;
         if (w.body !== undefined) {
           opts.headers['Content-Type'] = 'application/json';
           opts.body = JSON.stringify(w.body);
@@ -187,6 +232,11 @@ const Store = {
           r = await fetch(w.url, opts);
         } catch (netErr) {
           break; // server unreachable — keep the whole queue, retry later
+        }
+        if (r.status === 401) {
+          // Token died mid-replay — stop, surface, drain on next login
+          this._handle401();
+          break;
         }
         if (!r.ok) {
           // 4xx/5xx — the server rejected this specific write. Drop it so

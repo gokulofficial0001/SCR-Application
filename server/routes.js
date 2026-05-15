@@ -146,12 +146,16 @@ adminRoutes.post('/reset', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRoutes.get('/health', (req, res) => {
+// Public health handler — exported separately so server.js can register
+// it OUTSIDE the auth/admin gates (monitoring + the watchdog must reach
+// it without a token).
+function healthHandler(req, res) {
   const counts = {};
   for (const coll of COLLECTIONS) {
     counts[coll] = db.prepare(`SELECT COUNT(*) AS n FROM ${coll}`).get().n;
   }
   res.json({ ok: true, counts, timestamp: nowISO() });
-});
+}
+adminRoutes.get('/health', healthHandler);  // kept for backward compat too
 
-module.exports = { router, metaRoutes, adminRoutes };
+module.exports = { router, metaRoutes, adminRoutes, healthHandler };

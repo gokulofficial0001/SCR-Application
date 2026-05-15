@@ -27,7 +27,13 @@
       "PowerShell(node 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\write-queue-test.js' 2>&1)",
       "PowerShell(node 'd:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\consolidate-users.js' 2>&1)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File workflow-e2e-test.ps1)",
+      "Bash(xxd)",
+      "Bash(curl -s http://localhost:3500/api/admin/health -m 3)",
+      "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\workflow-e2e-test.ps1\" 2>&1 | Select-Object -First 80)",
+      "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\workflow-e2e-test.ps1\" 2>&1 | Select-Object -Last 100)",
+      "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\requester-create-test.ps1\" 2>&1 | Select-Object -Last 40)"
     ]
   }
 }

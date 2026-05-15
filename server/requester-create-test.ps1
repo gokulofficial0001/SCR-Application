@@ -8,9 +8,14 @@
 $api = 'http://localhost:3500/api'
 $ErrorActionPreference = 'Stop'
 
-function GET($p)  { Invoke-RestMethod -Uri "$api/$p" }
+# Authenticate as admin — required now that /api/* enforces Bearer auth
+$loginRes = Invoke-RestMethod -Uri "$api/auth/login" -Method POST `
+  -Body (@{username='admin';password='admin123'}|ConvertTo-Json) -ContentType 'application/json'
+$script:HEADERS = @{ 'Authorization' = "Bearer $($loginRes.token)" }
+
+function GET($p)  { Invoke-RestMethod -Uri "$api/$p" -Headers $HEADERS }
 function POST($p,$b) {
-  Invoke-RestMethod -Uri "$api/$p" -Method POST `
+  Invoke-RestMethod -Uri "$api/$p" -Method POST -Headers $HEADERS `
     -Body ($b | ConvertTo-Json -Depth 12) -ContentType 'application/json'
 }
 function NOW { (Get-Date).ToUniversalTime().ToString('o') }

@@ -4,20 +4,31 @@
 $api = 'http://localhost:3500/api'
 $ErrorActionPreference = 'Stop'
 
+# === Authenticate as admin - required now that /api/* enforces Bearer auth ===
+try {
+  $loginRes = Invoke-RestMethod -Uri "$api/auth/login" -Method POST `
+    -Body (@{username='admin';password='admin123'}|ConvertTo-Json) -ContentType 'application/json'
+  $script:HEADERS = @{ 'Authorization' = "Bearer $($loginRes.token)" }
+} catch {
+  Write-Host "  [FATAL] Could not log in as admin/admin123 - cannot run test." -ForegroundColor Red
+  Write-Host "          Make sure the server is up and the admin password is correct."
+  throw
+}
+
 function POST($path, $body) {
-  Invoke-RestMethod -Uri "$api/$path" -Method POST `
+  Invoke-RestMethod -Uri "$api/$path" -Method POST -Headers $HEADERS `
     -Body ($body | ConvertTo-Json -Depth 10) -ContentType 'application/json'
 }
 function PATCH($path, $body) {
-  Invoke-RestMethod -Uri "$api/$path" -Method PATCH `
+  Invoke-RestMethod -Uri "$api/$path" -Method PATCH -Headers $HEADERS `
     -Body ($body | ConvertTo-Json -Depth 10) -ContentType 'application/json'
 }
 function PUT($path, $body) {
-  Invoke-RestMethod -Uri "$api/$path" -Method PUT `
+  Invoke-RestMethod -Uri "$api/$path" -Method PUT -Headers $HEADERS `
     -Body ($body | ConvertTo-Json -Depth 10) -ContentType 'application/json'
 }
 function GET($path) {
-  Invoke-RestMethod -Uri "$api/$path"
+  Invoke-RestMethod -Uri "$api/$path" -Headers $HEADERS
 }
 function NOW { (Get-Date).ToUniversalTime().ToString('o') }
 function TODAY { (Get-Date).ToString('yyyy-MM-dd') }
@@ -35,7 +46,7 @@ function FAIL($msg) { Write-Host "  [FAIL] $msg" -ForegroundColor Red; throw $ms
 STEP 0 "Reset DB + seed users/departments/SLA"
 # =====================================================================
 
-Invoke-RestMethod -Uri "$api/admin/reset" -Method POST | Out-Null
+Invoke-RestMethod -Uri "$api/admin/reset" -Method POST -Headers $HEADERS | Out-Null
 
 # IMPORTANT: use the SAME canonical user IDs as Store.ensureDefaultUsers()
 # (user_dev1 / user_req1, not user_dev / user_req) so that a browser load

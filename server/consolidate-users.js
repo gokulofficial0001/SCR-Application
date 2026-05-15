@@ -33,20 +33,34 @@ const ROLE_PERMISSIONS = {
   requester:      { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
 };
 
+let TOKEN = null;
+function authHeaders(extra = {}) {
+  const h = { ...extra };
+  if (TOKEN) h['Authorization'] = `Bearer ${TOKEN}`;
+  return h;
+}
+async function login() {
+  const r = await fetch(`${API}/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  if (!r.ok) throw new Error(`Login as admin failed: ${r.status} — cannot consolidate without admin rights`);
+  TOKEN = (await r.json()).token;
+}
 async function getColl(c) {
-  const r = await fetch(`${API}/${c}`);
+  const r = await fetch(`${API}/${c}`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`GET ${c} -> ${r.status}`);
   return r.json();
 }
 async function putColl(c, items) {
   const r = await fetch(`${API}/${c}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items)
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(items)
   });
   if (!r.ok) throw new Error(`PUT ${c} -> ${r.status}`);
 }
 async function putMeta(k, v) {
   const r = await fetch(`${API}/meta/${k}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(v)
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(v)
   });
   if (!r.ok) throw new Error(`PUT meta/${k} -> ${r.status}`);
 }
@@ -55,6 +69,8 @@ async function putMeta(k, v) {
   console.log('============================================================');
   console.log('  User consolidation + role_permissions restore');
   console.log('============================================================\n');
+  await login();
+  console.log('  Authenticated as admin\n');
 
   // 1. Remap user-id references in every collection
   for (const [coll, fields] of Object.entries(USER_ID_FIELDS)) {
