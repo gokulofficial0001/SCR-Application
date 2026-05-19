@@ -32,6 +32,14 @@ const Auth = {
     requester: {
       pages: ['self-service', 'scr-detail', 'scr-create', 'feedback', 'notifications'],
       actions: ['create_scr', 'submit_feedback']
+    },
+    // Internal requester — same portal as Requester, but the SCR form
+    // exposes the extra IT-side fields (study details, received-by, PH
+    // name, developer assignment, schedule). The self-edit window stays
+    // open until the Implementation team accepts the SCR (Stage 2).
+    internal_requester: {
+      pages: ['self-service', 'scr-detail', 'scr-create', 'feedback', 'notifications'],
+      actions: ['create_scr', 'edit_scr', 'submit_feedback']
     }
   },
 
@@ -176,7 +184,7 @@ const Auth = {
   getDefaultPage() {
     const user = this.currentUser();
     if (!user) return 'login';
-    if (user.role === 'requester') return 'self-service';
+    if (user.role === 'requester' || user.role === 'internal_requester') return 'self-service';
     return 'dashboard';
   },
 
@@ -329,6 +337,7 @@ const Auth = {
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('impl','impl123')"        title="Implementation Team" style="background:rgba(20,184,166,0.1);border-color:rgba(20,184,166,0.3);color:#5eead4;">🔬 Impl. Team</button>
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('developer','dev123')"    title="Developer">💻 Developer</button>
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('requester','req123')"    title="Requester" style="grid-column:span 3">🙋 Requester (End User)</button>
+                <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('internal','int123')"   title="Internal Requester (IT-internal user with pre-fill form)" style="grid-column:span 3;background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.3);color:#d8b4fe;">🏢 Internal Requester</button>
               </div>
             </div>
           </div>

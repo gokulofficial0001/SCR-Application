@@ -187,7 +187,7 @@ const DevUpdates = {
     const user = Auth.currentUser();
     // Requesters don't see internal development progress — it's
     // implementation-side detail. Their view shows only status + pipeline.
-    if (user && user.role === 'requester') return '';
+    if (user && (user.role === 'requester' || user.role === 'internal_requester')) return '';
 
     const updates = this.getForSCR(scrId);
     const isAssignedDev = user && (scr.assignedDeveloper === user.id || scr.assignedDeveloper2 === user.id);

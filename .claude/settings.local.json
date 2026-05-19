@@ -33,7 +33,18 @@
       "Bash(curl -s http://localhost:3500/api/admin/health -m 3)",
       "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\workflow-e2e-test.ps1\" 2>&1 | Select-Object -First 80)",
       "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\workflow-e2e-test.ps1\" 2>&1 | Select-Object -Last 100)",
-      "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\requester-create-test.ps1\" 2>&1 | Select-Object -Last 40)"
+      "PowerShell($ErrorActionPreference = 'Continue'; powershell.exe -ExecutionPolicy Bypass -File \"d:\\\\scr\\\\SCR APPLICATION ANTIGRAVITY\\\\SCR FILES\\\\server\\\\requester-create-test.ps1\" 2>&1 | Select-Object -Last 40)",
+      "Bash(curl -s -X POST http://localhost:3500/api/auth/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"admin123\\\\\"}\")",
+      "Bash(curl -s http://localhost:3500/api/departments -H \"Authorization: Bearer xw-B6NpcI0ErSZDirZ4iZojH29pvAu3zXf5CGCstN1o\")",
+      "Bash(curl -s http://localhost:3500/api/users -H \"Authorization: Bearer xw-B6NpcI0ErSZDirZ4iZojH29pvAu3zXf5CGCstN1o\")",
+      "Bash(node -e \"let d=''; process.stdin.on\\('data', c=>d+=c\\); process.stdin.on\\('end', \\(\\)=>{ const u=JSON.parse\\(d\\); console.log\\(u.map\\(x=>x.id+' | '+x.name+' | '+x.role+' | '+x.department\\).join\\('\\\\n'\\)\\); }\\)\")",
+      "Bash(node seed-demo-data.js)",
+      "Bash(curl -s -X PUT http://localhost:3500/api/departments -H \"Authorization: Bearer xw-B6NpcI0ErSZDirZ4iZojH29pvAu3zXf5CGCstN1o\" -H \"Content-Type: application/json\" -d \"[{\\\\\"id\\\\\":\\\\\"dept_test\\\\\",\\\\\"name\\\\\":\\\\\"Test Dept\\\\\",\\\\\"hodName\\\\\":\\\\\"x\\\\\",\\\\\"hodEmail\\\\\":\\\\\"x@y.com\\\\\",\\\\\"coordinatorName\\\\\":\\\\\"y\\\\\",\\\\\"coordinatorEmail\\\\\":\\\\\"y@y.com\\\\\",\\\\\"createdAt\\\\\":\\\\\"2026-05-15T00:00:00Z\\\\\",\\\\\"updatedAt\\\\\":\\\\\"2026-05-15T00:00:00Z\\\\\"}]\" -w \"\\\\n%{http_code}\\\\n\")",
+      "Bash(curl -s -X DELETE http://localhost:3500/api/departments/dept_test -H \"Authorization: Bearer xw-B6NpcI0ErSZDirZ4iZojH29pvAu3zXf5CGCstN1o\" -w \"\\\\n%{http_code}\\\\n\")",
+      "Bash(node -e \"let d=''; process.stdin.on\\('data', c=>d+=c\\); process.stdin.on\\('end', \\(\\)=>{ const a=JSON.parse\\(d\\); console.log\\('id'.padEnd\\(14\\)+'| name'.padEnd\\(28\\)+'| HOD'.padEnd\\(24\\)+'| IT Coordinator'\\); console.log\\('-'.repeat\\(95\\)\\); a.forEach\\(x=>console.log\\(\\(x.id||''\\).padEnd\\(13\\)+' | '+\\(x.name||''\\).padEnd\\(26\\)+' | '+\\(x.hodName||''\\).padEnd\\(22\\)+' | '+\\(x.coordinatorName||''\\)\\)\\); }\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const src=fs.readFileSync\\('js/scr-manager.js','utf8'\\); try { new Function\\(src\\); console.log\\('JS parse OK'\\); } catch\\(e\\) { console.log\\('PARSE ERROR:', e.message\\); process.exit\\(1\\); }\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const src=fs.readFileSync\\('js/reports.js','utf8'\\); try { new Function\\(src\\); console.log\\('reports.js parse OK'\\); } catch\\(e\\) { console.log\\('PARSE ERROR:', e.message\\); process.exit\\(1\\); }\")",
+      "Bash(curl -s -X POST http://localhost:3500/api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"internal\",\"password\":\"int123\"}' -w \"\\\\n%{http_code}\\\\n\")"
     ]
   }
 }

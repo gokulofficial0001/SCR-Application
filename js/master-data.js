@@ -419,7 +419,7 @@ const MasterData = {
   // ── User Rights Matrix ──────────────────────────────────
   renderUserRightsTab() {
     const savedPerms = Store._get('role_permissions') || Auth.permissions;
-    const roles = ['admin', 'cio', 'agm_it', 'project_head', 'implementation', 'developer', 'requester'];
+    const roles = ['admin', 'cio', 'agm_it', 'project_head', 'implementation', 'developer', 'requester', 'internal_requester'];
     const allPages = ['dashboard','scr-list','scr-detail','scr-create','approvals','feedback','audit','master-data','notifications','settings','self-service'];
     const allActions = ['create_scr','edit_scr','delete_scr','assign_scr','advance_stage','approve','reject','hold','close_ticket','manage_users','manage_departments','view_audit','reset_data','submit_feedback'];
     const pageLabels = {
@@ -481,7 +481,7 @@ const MasterData = {
   },
 
   saveUserRights() {
-    const roles = ['admin','cio','agm_it','project_head','implementation','developer','requester'];
+    const roles = ['admin','cio','agm_it','project_head','implementation','developer','requester','internal_requester'];
     const perms = {};
     roles.forEach(r => { perms[r] = { pages: [], actions: [] }; });
 

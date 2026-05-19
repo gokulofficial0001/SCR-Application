@@ -196,7 +196,8 @@ const Utils = {
     'project_head': 'Project Head',
     'implementation': 'Implementation Team',
     'developer': 'Developer',
-    'requester': 'Requester'
+    'requester': 'Requester',
+    'internal_requester': 'Internal Requester'
   },
 
   getRoleLabel(role) {

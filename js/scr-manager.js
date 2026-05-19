@@ -194,9 +194,9 @@ const SCRManager = {
       scrs = scrs.filter(s => SLAEngine.calculate(s).status === slaStatus);
     }
 
-    // Role-based filtering for requester
+    // Role-based filtering: requester + internal_requester see only their own
     const user = Auth.currentUser();
-    if (user.role === 'requester') {
+    if (user.role === 'requester' || user.role === 'internal_requester') {
       scrs = scrs.filter(s => s.createdBy === user.id);
     }
 
@@ -367,8 +367,8 @@ const SCRManager = {
       return '';
     }
 
-    // Access control: requesters can only view SCRs they created
-    if (currentUser.role === 'requester' && scr.createdBy !== currentUser.id) {
+    // Access control: requesters + internal requesters can only view SCRs they created
+    if ((currentUser.role === 'requester' || currentUser.role === 'internal_requester') && scr.createdBy !== currentUser.id) {
       return `<div class="empty-state">
         <div class="empty-state-icon">🔒</div>
         <h3 class="empty-state-title">Access Denied</h3>
@@ -380,7 +380,15 @@ const SCRManager = {
     const dev = scr.assignedDeveloper ? Store.getById('users', scr.assignedDeveloper) : null;
     const dev2 = scr.assignedDeveloper2 ? Store.getById('users', scr.assignedDeveloper2) : null;
     const creator = Store.getById('users', scr.createdBy);
-    const canEdit = Auth.canPerformAction('edit_scr') && scr.status !== 'Closed' && scr.status !== 'Rejected';
+    // Internal requesters can only edit their own SCR, and only until the
+    // Implementation team accepts it (Stage 2). After that, only Admin (and
+    // the normal IT roles) keep the edit ability.
+    const isInternalReqOwner = currentUser.role === 'internal_requester'
+      && scr.createdBy === currentUser.id
+      && (scr.currentStage || 1) < 2;
+    const canEdit = Auth.canPerformAction('edit_scr')
+      && (currentUser.role !== 'internal_requester' || isInternalReqOwner)
+      && scr.status !== 'Closed' && scr.status !== 'Rejected';
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isImpl = Auth.hasRole('implementation', 'admin');
@@ -1049,14 +1057,19 @@ const SCRManager = {
 
     // Role visibility flags
     const isRequester = Auth.hasRole('requester');
+    const isInternalReq = Auth.hasRole('internal_requester');
     const isImpl = Auth.hasRole('implementation', 'admin');
     const isPH = Auth.hasRole('project_head', 'admin');
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isAdmin = Auth.hasRole('admin');
+    // Both roles use the self-service portal and only see their own SCRs;
+    // use this flag wherever the *layout* (simplified header, hidden
+    // approver bits) should match the regular Requester experience.
+    const isReqLike = isRequester || isInternalReq;
 
-    // Pre-fill end user from current user if requester
-    const defaultRequestedBy = scr.requestedBy || (isRequester ? user.name : '');
-    const defaultDept = scr.department || (isRequester ? user.department : '');
+    // Pre-fill end user from current user if either kind of requester
+    const defaultRequestedBy = scr.requestedBy || (isReqLike ? user.name : '');
+    const defaultDept = scr.department || (isReqLike ? user.department : '');
     // Pre-fill study primary from current user if implementation team
     const defaultStudyPrimary = scr.studyDoneByPrimary || (isImpl && !isAdmin ? user.name : '');
 
@@ -1383,6 +1396,75 @@ const SCRManager = {
             <input type="hidden" id="scr-study-to" value="${scr.studyDateTo || ''}">
           </div>
         </div>
+        ` : isInternalReq ? `
+        <!-- Internal Requester: pre-fills technical fields normally captured by Impl + PH later -->
+        <div class="scr-form-section scr-section-impl">
+          <div class="scr-form-section-title">
+            <span class="scr-section-num impl">7</span>
+            <span>Study & Assignment Details</span>
+            <span class="scr-section-role-badge">Internal Requester</span>
+          </div>
+          <div class="scr-form-section-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Study Done By (Primary)</label>
+                <input type="text" class="form-input" id="scr-study-primary" value="${Utils.escapeHtml(scr.studyDoneByPrimary || '')}" placeholder="Name of primary analyst">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Done By (Secondary)</label>
+                <input type="text" class="form-input" id="scr-study-secondary" value="${Utils.escapeHtml(scr.studyDoneBySecondary || '')}" placeholder="Name of secondary analyst">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 1</label>
+                <select class="form-select" id="scr-developer">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Assigned Developer 2</label>
+                <select class="form-select" id="scr-developer2">
+                  <option value="">Select developer...</option>
+                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Study Date From</label>
+                <input type="date" class="form-input" id="scr-study-from" value="${scr.studyDateFrom || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Study Date To</label>
+                <input type="date" class="form-input" id="scr-study-to" value="${scr.studyDateTo || ''}">
+              </div>
+            </div>
+            <div style="margin-top:var(--space-4);padding:var(--space-4);background:var(--color-bg-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg)">
+              <p class="font-semi text-sm" style="margin-bottom:var(--space-3)">📅 Development Timeline</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Assigned On</label>
+                  <input type="date" class="form-input" id="scr-assigned-on" value="${scr.assignedOn || ''}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Schedule Date (target completion)</label>
+                  <input type="date" class="form-input" id="scr-schedule" value="${scr.scheduleDate || ''}">
+                </div>
+              </div>
+              <div class="form-group" style="max-width:400px">
+                <label class="form-label">Completed On</label>
+                <input type="date" class="form-input" id="scr-completed-on" value="${scr.completedOn || ''}">
+                <p class="form-help">Usually filled at QA sign-off — leave empty if not yet completed.</p>
+              </div>
+            </div>
+            <div class="form-group" style="max-width:400px;margin-top:var(--space-4)">
+              <label class="form-label">Project Head Name</label>
+              <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Mr. Panneer Selvan')}" placeholder="Project Head full name">
+            </div>
+          </div>
+        </div>
         ` : `<input type="hidden" id="scr-developer" value="${Utils.escapeHtml(scr.assignedDeveloper || '')}">
              <input type="hidden" id="scr-developer2" value="${Utils.escapeHtml(scr.assignedDeveloper2 || '')}">
              <input type="hidden" id="scr-study-primary" value="">
@@ -1673,16 +1755,28 @@ const SCRManager = {
     // pattern. If the element's value is "__other__" it reads the paired
     // <id>__other text input instead, so admin-typed custom names flow
     // through transparently with no per-field special casing below.
+    //
+    // Returns undefined (not '') when the element isn't in the DOM at all,
+    // so we can strip it from the update payload and let Store.update's
+    // spread-merge preserve whatever's already on the SCR. Matters for the
+    // internal_requester edit path: their form doesn't include the approval
+    // or remark fields, and we don't want those silently wiped.
     const getVal = (id) => {
       const el = document.getElementById(id);
-      if (!el) return '';
+      if (!el) return undefined;
       if (el.value === '__other__') {
         const txt = document.getElementById(id + '__other');
         return txt ? txt.value.trim() : '';
       }
       return el.value;
     };
-    const getRadio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
+    const getRadio = (name) => {
+      const checked = document.querySelector(`input[name="${name}"]:checked`);
+      if (checked) return checked.value;
+      // No radio with this name at all → not in this role's form → preserve.
+      // Some but unselected → '' (user actively cleared it).
+      return document.querySelector(`input[name="${name}"]`) ? '' : undefined;
+    };
 
     // Preserve existing attachments if section was hidden for this role
     const existing = editId ? (Store.getById('scr_requests', editId) || {}) : {};
@@ -1751,6 +1845,13 @@ const SCRManager = {
     // Trim all string fields to prevent whitespace-only values sneaking through
     Object.keys(data).forEach(k => {
       if (typeof data[k] === 'string') data[k] = data[k].trim();
+    });
+
+    // Drop undefined keys so update payloads don't wipe fields the current
+    // role's form didn't render (e.g. internal_requester never sees the
+    // Approval section, so its agm/cio/remark fields should be preserved).
+    Object.keys(data).forEach(k => {
+      if (data[k] === undefined) delete data[k];
     });
 
     let result;

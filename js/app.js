@@ -133,7 +133,7 @@ const App = {
   // ── Render App Shell ────────────────────────────────────
   renderShell() {
     const user = Auth.currentUser();
-    const isRequester = user.role === 'requester';
+    const isRequester = user.role === 'requester' || user.role === 'internal_requester';
 
     document.getElementById('app').innerHTML = `
       <!-- Sidebar -->
