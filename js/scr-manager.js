@@ -601,11 +601,11 @@ const SCRManager = {
                 </div>
                 <div class="detail-field">
                   <span class="detail-label">Developer 1</span>
-                  <span class="detail-value">${dev ? Utils.escapeHtml(dev.name) : '—'}</span>
+                  <span class="detail-value">${dev ? Utils.escapeHtml(dev.name) : (scr.assignedDeveloper ? Utils.escapeHtml(scr.assignedDeveloper) : '—')}</span>
                 </div>
                 <div class="detail-field">
                   <span class="detail-label">Developer 2</span>
-                  <span class="detail-value">${dev2 ? Utils.escapeHtml(dev2.name) : '—'}</span>
+                  <span class="detail-value">${dev2 ? Utils.escapeHtml(dev2.name) : (scr.assignedDeveloper2 ? Utils.escapeHtml(scr.assignedDeveloper2) : '—')}</span>
                 </div>
                 <div class="detail-field">
                   <span class="detail-label">Assigned On</span>
@@ -1192,7 +1192,14 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Requested By <span class="required">*</span></label>
-                <input type="text" class="form-input" id="scr-requested-by" value="${Utils.escapeHtml(defaultRequestedBy)}" placeholder="Full name of requester" ${isRequester ? 'readonly' : ''} required>
+                ${isAdmin ? this._renderSelectWithOther({
+                  id: 'scr-requested-by',
+                  options: Store.getAll('users').map(u => ({ value: u.name, label: u.name + (u.department ? ` (${u.department})` : '') })),
+                  selectedValue: defaultRequestedBy,
+                  placeholder: 'Select requester...',
+                  allowOther: true,
+                  required: true
+                }) : `<input type="text" class="form-input" id="scr-requested-by" value="${Utils.escapeHtml(defaultRequestedBy)}" placeholder="Full name of requester" ${isRequester ? 'readonly' : ''} required>`}
               </div>
               <div class="form-group">
                 <label class="form-label">Department Name <span class="required">*</span></label>
@@ -1215,7 +1222,13 @@ const SCRManager = {
                 </div>
                 <div class="form-group">
                   <label class="form-label">Coordinated By</label>
-                  <input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">
+                  ${isAdmin ? this._renderSelectWithOther({
+                    id: 'scr-coordinated-by',
+                    options: Store.filter('users', u => u.role === 'implementation' || u.role === 'admin').map(u => ({ value: u.name, label: u.name })),
+                    selectedValue: scr.coordinatedBy || '',
+                    placeholder: 'Select coordinator...',
+                    allowOther: true
+                  }) : `<input type="text" class="form-input" id="scr-coordinated-by" value="${Utils.escapeHtml(scr.coordinatedBy || '')}" placeholder="IT coordinator name">`}
                   <span class="form-hint">Auto-filled from department · editable if a different coordinator is handling this SCR</span>
                 </div>
               </div>
@@ -1240,33 +1253,45 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Study Done By (Primary)</label>
-                <select class="form-select" id="scr-study-primary">
-                  <option value="">Select primary analyst...</option>
-                  ${impTeam.map(u => `<option value="${Utils.escapeHtml(u.name)}" ${(defaultStudyPrimary === u.name) ? 'selected' : ''}>${Utils.escapeHtml(u.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-study-primary',
+                  options: impTeam.map(u => ({ value: u.name, label: u.name })),
+                  selectedValue: defaultStudyPrimary,
+                  placeholder: 'Select primary analyst...',
+                  allowOther: isAdmin
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">Study Done By (Secondary)</label>
-                <select class="form-select" id="scr-study-secondary">
-                  <option value="">Select secondary analyst...</option>
-                  ${impTeam.map(u => `<option value="${Utils.escapeHtml(u.name)}" ${scr.studyDoneBySecondary === u.name ? 'selected' : ''}>${Utils.escapeHtml(u.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-study-secondary',
+                  options: impTeam.map(u => ({ value: u.name, label: u.name })),
+                  selectedValue: scr.studyDoneBySecondary || '',
+                  placeholder: 'Select secondary analyst...',
+                  allowOther: isAdmin
+                })}
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Assigned Developer 1</label>
-                <select class="form-select" id="scr-developer">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper || '',
+                  placeholder: 'Select developer...',
+                  allowOther: isAdmin
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">Assigned Developer 2</label>
-                <select class="form-select" id="scr-developer2">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer2',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper2 || '',
+                  placeholder: 'Select developer...',
+                  allowOther: isAdmin
+                })}
               </div>
             </div>
             <div class="form-row">
@@ -1311,17 +1336,24 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Assigned Developer 1 <span class="required">*</span></label>
-                <select class="form-select" id="scr-developer">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper || '',
+                  placeholder: 'Select developer...',
+                  allowOther: isAdmin,
+                  required: true
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">Assigned Developer 2</label>
-                <select class="form-select" id="scr-developer2">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer2',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper2 || '',
+                  placeholder: 'Select developer...',
+                  allowOther: isAdmin
+                })}
               </div>
             </div>
 
@@ -1510,6 +1542,71 @@ const SCRManager = {
     this.onDeptChange();
   },
 
+  // ── Reusable: dropdown with admin-only "Other" free-text fallback ─
+  // opts = { id, options: [{value,label}], selectedValue, placeholder, allowOther, required }
+  // Renders the <select> + a hidden text input that toggles in when "Other"
+  // is picked. When the selected value doesn't match any option (e.g. a
+  // previously-typed custom name on an SCR being edited), it starts in
+  // free-text mode so the value is preserved across edits.
+  _renderSelectWithOther(opts) {
+    const { id, options, selectedValue, placeholder, allowOther, required } = opts;
+    const sel = selectedValue || '';
+    const matchesOption = options.some(o => o.value === sel);
+    const startInOther = !!allowOther && !matchesOption && !!sel;
+    const dropdownValue = startInOther ? '__other__' : sel;
+
+    const optsHtml = options.map(o =>
+      `<option value="${Utils.escapeHtml(o.value)}" ${dropdownValue === o.value ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`
+    ).join('');
+    const otherOpt = allowOther
+      ? `<option value="__other__" ${dropdownValue === '__other__' ? 'selected' : ''}>➕ Other (custom)…</option>`
+      : '';
+    const onchange = allowOther ? `onchange="SCRManager.toggleOtherInput('${id}')"` : '';
+    const req = required ? 'required' : '';
+
+    const otherInputHtml = allowOther ? `
+      <input type="text" class="form-input" id="${id}__other"
+             value="${Utils.escapeHtml(startInOther ? sel : '')}"
+             placeholder="Enter custom name"
+             style="margin-top:6px;display:${dropdownValue === '__other__' ? 'block' : 'none'}">
+    ` : '';
+
+    return `
+      <select class="form-select" id="${id}" ${onchange} ${req}>
+        <option value="">${Utils.escapeHtml(placeholder || 'Select...')}</option>
+        ${optsHtml}
+        ${otherOpt}
+      </select>
+      ${otherInputHtml}
+    `;
+  },
+
+  // onchange handler for selects rendered via _renderSelectWithOther
+  toggleOtherInput(id) {
+    const sel = document.getElementById(id);
+    const txt = document.getElementById(id + '__other');
+    if (!sel || !txt) return;
+    if (sel.value === '__other__') {
+      txt.style.display = 'block';
+      txt.focus();
+    } else {
+      txt.style.display = 'none';
+    }
+  },
+
+  // Reads the effective value of a select that may have an "Other" branch.
+  // Returns the typed free-text value when "__other__" is selected, else
+  // the dropdown's plain value. Works for plain <select>s too.
+  _readSelectVal(id) {
+    const sel = document.getElementById(id);
+    if (!sel) return '';
+    if (sel.value === '__other__') {
+      const txt = document.getElementById(id + '__other');
+      return txt ? txt.value.trim() : '';
+    }
+    return sel.value;
+  },
+
   // ── Department change handler ───────────────────────────
   onDeptChange() {
     const deptName = document.getElementById('scr-dept')?.value;
@@ -1522,10 +1619,27 @@ const SCRManager = {
     if (hodField) hodField.value = dept.hodName || '';
 
     // IT Coordinator auto-fill — only overwrite if currently empty,
-    // so a manually-typed coordinator isn't wiped when dept is re-selected
+    // so a manually-typed coordinator isn't wiped when dept is re-selected.
+    // Coordinator field can be either an <input> (non-admin) or a <select>
+    // with an "Other" branch (admin); handle both.
     const coordField = document.getElementById('scr-coordinated-by');
-    if (coordField && !coordField.value.trim()) {
-      coordField.value = dept.coordinatorName || '';
+    if (!coordField) return;
+    const target = dept.coordinatorName || '';
+    if (coordField.tagName === 'SELECT') {
+      const current = this._readSelectVal('scr-coordinated-by').trim();
+      if (!current && target) {
+        const match = Array.from(coordField.options).find(o => o.value === target);
+        if (match) {
+          coordField.value = target;
+          this.toggleOtherInput('scr-coordinated-by');
+        } else {
+          coordField.value = '__other__';
+          const txt = document.getElementById('scr-coordinated-by__other');
+          if (txt) { txt.value = target; txt.style.display = 'block'; }
+        }
+      }
+    } else if (!coordField.value.trim()) {
+      coordField.value = target;
     }
   },
 
@@ -1555,7 +1669,19 @@ const SCRManager = {
   handleSubmit(e, editId) {
     e.preventDefault();
 
-    const getVal = (id) => document.getElementById(id)?.value || '';
+    // getVal handles both plain inputs/selects AND the "Other → free text"
+    // pattern. If the element's value is "__other__" it reads the paired
+    // <id>__other text input instead, so admin-typed custom names flow
+    // through transparently with no per-field special casing below.
+    const getVal = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return '';
+      if (el.value === '__other__') {
+        const txt = document.getElementById(id + '__other');
+        return txt ? txt.value.trim() : '';
+      }
+      return el.value;
+    };
     const getRadio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
 
     // Preserve existing attachments if section was hidden for this role

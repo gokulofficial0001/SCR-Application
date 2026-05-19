@@ -460,7 +460,7 @@ const Reports = {
         s.scrNumber, s.scrDate, s.createdAt, s.department, s.moduleName,
         s.requestType, s.intervention || s.priority, s.priority, s.status,
         Utils.getStageName(s.currentStage),
-        s.requestedBy, dev ? dev.name : '', s.scheduleDate, s.completedOn,
+        s.requestedBy, dev ? dev.name : (s.assignedDeveloper || ''), s.scheduleDate, s.completedOn,
         s.approvalStatus, r.fromStageName || '', r.remarks || s.rejectionRemarks || '',
         r.by || s.rejectedBy || '', r.at || s.rejectedAt || '',
         sla.status, sla.label
