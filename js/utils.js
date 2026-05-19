@@ -205,22 +205,27 @@ const Utils = {
   },
 
   // ── Department list ─────────────────────────────────────
+  // Hospital department list — HOD map matches the canonical hard-coded
+  // reference (mirrored in server/seed-demo-data.js). Coordinator names
+  // are blank by default: set them per dept via Master Data when needed.
   defaultDepartments: [
-    { id: 'dept_1',  name: 'Cardiology',         hodName: 'Dr. Ramesh Kumar',   hodEmail: 'ramesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_2',  name: 'Radiology',          hodName: 'Dr. Priya Sharma',   hodEmail: 'priya@hospital.in',    coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_3',  name: 'Neurology',          hodName: 'Dr. Suresh Menon',   hodEmail: 'suresh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_4',  name: 'Orthopedics',        hodName: 'Dr. Kavitha Nair',   hodEmail: 'kavitha@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_5',  name: 'Pediatrics',         hodName: 'Dr. Anil Gupta',     hodEmail: 'anil@hospital.in',     coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_6',  name: 'Oncology',           hodName: 'Dr. Lakshmi Iyer',   hodEmail: 'lakshmi@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_7',  name: 'Emergency Medicine', hodName: 'Dr. Vikram Singh',   hodEmail: 'vikram@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_8',  name: 'General Surgery',    hodName: 'Dr. Meena Patel',    hodEmail: 'meena@hospital.in',    coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_9',  name: 'Ophthalmology',      hodName: 'Dr. Rajesh Verma',   hodEmail: 'rajesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_10', name: 'Pharmacy',           hodName: 'Mr. Ganesh Babu',    hodEmail: 'ganesh@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_11', name: 'Laboratory',         hodName: 'Dr. Saranya M',      hodEmail: 'saranya@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_12', name: 'Nursing',            hodName: 'Ms. Anjali Thomas',  hodEmail: 'anjali@hospital.in',   coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_13', name: 'Administration',     hodName: 'Mr. Senthil Raja',   hodEmail: 'senthil@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_14', name: 'Finance & Billing',  hodName: 'Mr. Karthik R',      hodEmail: 'karthik@hospital.in',  coordinatorName: '', coordinatorEmail: '' },
-    { id: 'dept_15', name: 'Information Technology', hodName: 'Mr. Panneer Selvan', hodEmail: 'panneer@hospital.in', coordinatorName: 'Mr. Gokulraj S', coordinatorEmail: 'gokulraj@hospital.in' }
+    { id: 'dept_it',       name: 'IT',               hodName: 'Mr. S. Saravanakumar', hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_hr',       name: 'HR',               hodName: 'Mr. Nagappan',         hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_him',      name: 'HIM',              hodName: 'Mr. Prince Kumar',     hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_intaudit', name: 'Internal Audit',   hodName: 'Mrs. Mallika Devi',    hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_quality',  name: 'Quality',          hodName: 'Dr. Madhavi',          hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_pharm',    name: 'Pharmacy',         hodName: 'Mr. Tamilarasan',      hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_radio',    name: 'Radiology',        hodName: 'Mrs. Annalakshmi',     hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_lab',      name: 'Lab',              hodName: 'Dr. Kavitha',          hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_engg',     name: 'Engineering',      hodName: 'Mr. Ravikumar',        hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_nurs',     name: 'Nursing',          hodName: 'Mrs. Jayalakshmi',     hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_acct',     name: 'Accounts',         hodName: 'Mr. Pandia Rajan K',   hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_biomed',   name: 'Biomedical',       hodName: 'Mrs. Anandhi',         hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_ins',      name: 'Insurance',        hodName: 'Mr. Surendiran',       hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_pr',       name: 'Public Relations', hodName: 'Mrs. Bhanu Rao',       hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_histo',    name: 'Histopathology',   hodName: 'Mrs. Saritha S',       hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_house',    name: 'Housekeeping',     hodName: 'Mr. Preejith V',       hodEmail: '', coordinatorName: '', coordinatorEmail: '' },
+    { id: 'dept_diet',     name: 'Dietary',          hodName: 'Mrs. Mekala D',        hodEmail: '', coordinatorName: '', coordinatorEmail: '' }
   ],
 
   // ── Toast helper (capped to 4 visible to avoid spam) ────

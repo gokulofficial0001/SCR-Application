@@ -1,59 +1,52 @@
-// Demo data seeder — adds 15 hospital departments with HOD + IT-coordinator
-// assignments AND one requester login per clinical department, so the SCR
-// workflow can be demoed end-to-end from any of them.
+// Demo data seeder — installs the 17 hospital departments + per-dept
+// requester logins per the HOD map provided by the user.
 //
-// Idempotent: re-running won't duplicate anything — existing departments
-// (matched by name) are updated, existing usernames are skipped.
+// Behavior is a CLEAN REPLACEMENT for the departments collection: every
+// pre-existing department row is removed and re-created from the list
+// below. For users the script is surgical — it only touches per-dept
+// requesters (id pattern user_req_<short>) and updates the existing
+// internal_requester's department if it points at a department that
+// no longer exists. All other users (admin, CIO, AGM, PH, impl, dev,
+// the original user_req2/3) are left as-is.
 //
 // Run:  node seed-demo-data.js
 //
-// Passwords are bcrypt-hashed BEFORE the POST hits the server, so the DB
-// never holds the plaintext "req123" even briefly.
+// Passwords are bcrypt-hashed BEFORE the POST hits the server, so the
+// database never holds the plaintext "req123" even briefly.
 
 const { hashPassword } = require('./auth-helpers');
 
 const API = 'http://localhost:3500/api';
 const REQUESTER_PASSWORD = 'req123';
 
-// IT-team users that already exist and can act as per-dept coordinators.
-// Cycled round-robin across the clinical depts below.
-const IT_COORDINATORS = [
-  { name: 'Mrs. Saranya P',     email: 'saranya@hospital.in' },
-  { name: 'Mr. Gokulraj S',     email: 'gokulraj@hospital.in' },
-  { name: 'Mr. Nantha Kumar S', email: 'nantha@hospital.in' }
-];
-
-// 15 demo departments — clinical + support. Each will get one requester.
-// Each dept's id is derived from `short` (e.g. dept_cardio) to avoid the
-// dept_1/dept_2/... collision with any pre-existing rows from earlier seeds.
+// 17 hospital departments — order matches the HOD map literal provided
+// by the user, so the master-data list reads in the same sequence.
 const DEPARTMENTS = [
-  { short: 'cardio',   name: 'Cardiology',             hodName: 'Dr. Ramesh Kumar',  hodEmail: 'ramesh@hospital.in'  },
-  { short: 'radio',    name: 'Radiology',              hodName: 'Dr. Priya Sharma',  hodEmail: 'priya@hospital.in'   },
-  { short: 'neuro',    name: 'Neurology',              hodName: 'Dr. Suresh Menon',  hodEmail: 'suresh@hospital.in'  },
-  { short: 'ortho',    name: 'Orthopedics',            hodName: 'Dr. Kavitha Nair',  hodEmail: 'kavitha@hospital.in' },
-  { short: 'paed',     name: 'Pediatrics',             hodName: 'Dr. Anil Gupta',    hodEmail: 'anil@hospital.in'    },
-  { short: 'onco',     name: 'Oncology',               hodName: 'Dr. Lakshmi Iyer',  hodEmail: 'lakshmi@hospital.in' },
-  { short: 'emerg',    name: 'Emergency Medicine',     hodName: 'Dr. Vikram Singh',  hodEmail: 'vikram@hospital.in'  },
-  { short: 'surg',     name: 'General Surgery',        hodName: 'Dr. Meena Patel',   hodEmail: 'meena@hospital.in'   },
-  { short: 'ophth',    name: 'Ophthalmology',          hodName: 'Dr. Rajesh Verma',  hodEmail: 'rajesh@hospital.in'  },
-  { short: 'pharm',    name: 'Pharmacy',               hodName: 'Mr. Ganesh Babu',   hodEmail: 'ganesh@hospital.in'  },
-  { short: 'lab',      name: 'Laboratory',             hodName: 'Dr. Saranya M',     hodEmail: 'saranyam@hospital.in'},
-  { short: 'nurs',     name: 'Nursing',                hodName: 'Ms. Anjali Thomas', hodEmail: 'anjali@hospital.in'  },
-  { short: 'admin',    name: 'Administration',         hodName: 'Mr. Senthil Raja',  hodEmail: 'senthil@hospital.in' },
-  { short: 'fin',      name: 'Finance & Billing',      hodName: 'Mr. Karthik R',     hodEmail: 'karthik@hospital.in' },
-  { short: 'it',       name: 'Information Technology', hodName: 'Mr. Panneer Selvan',hodEmail: 'panneer@hospital.in',
-    coordinatorName: 'Mr. Gokulraj S', coordinatorEmail: 'gokulraj@hospital.in', skipRequester: true }
+  { short: 'it',       name: 'IT',               hodName: 'Mr. S. Saravanakumar' },
+  { short: 'hr',       name: 'HR',               hodName: 'Mr. Nagappan' },
+  { short: 'him',      name: 'HIM',              hodName: 'Mr. Prince Kumar' },
+  { short: 'intaudit', name: 'Internal Audit',   hodName: 'Mrs. Mallika Devi' },
+  { short: 'quality',  name: 'Quality',          hodName: 'Dr. Madhavi' },
+  { short: 'pharm',    name: 'Pharmacy',         hodName: 'Mr. Tamilarasan' },
+  { short: 'radio',    name: 'Radiology',        hodName: 'Mrs. Annalakshmi' },
+  { short: 'lab',      name: 'Lab',              hodName: 'Dr. Kavitha' },
+  { short: 'engg',     name: 'Engineering',      hodName: 'Mr. Ravikumar' },
+  { short: 'nurs',     name: 'Nursing',          hodName: 'Mrs. Jayalakshmi' },
+  { short: 'acct',     name: 'Accounts',         hodName: 'Mr. Pandia Rajan K' },
+  { short: 'biomed',   name: 'Biomedical',       hodName: 'Mrs. Anandhi' },
+  { short: 'ins',      name: 'Insurance',        hodName: 'Mr. Surendiran' },
+  { short: 'pr',       name: 'Public Relations', hodName: 'Mrs. Bhanu Rao' },
+  { short: 'histo',    name: 'Histopathology',   hodName: 'Mrs. Saritha S' },
+  { short: 'house',    name: 'Housekeeping',     hodName: 'Mr. Preejith V' },
+  { short: 'diet',     name: 'Dietary',          hodName: 'Mrs. Mekala D' }
 ];
 
-// First-name lookup so a department requester sounds realistic — pulled from
-// the HOD's department so the demo data feels coherent.
-const REQUESTER_NAMES = {
-  cardio: 'Dr. Arjun Krishnan',  radio: 'Dr. Neha Reddy',     neuro: 'Dr. Sandeep Pillai',
-  ortho:  'Dr. Manish Joshi',    paed:  'Dr. Sneha Kapoor',   onco:  'Dr. Rohit Bansal',
-  emerg:  'Dr. Pooja Mehta',     surg:  'Dr. Vinod Kumar',    ophth: 'Dr. Aishwarya Rao',
-  pharm:  'Mr. Hari Prasad',     lab:   'Ms. Divya Krishnan', nurs:  'Ms. Latha Murugan',
-  admin:  'Mr. Suresh Iyer',     fin:   'Ms. Revathi Subramanian'
-};
+// Generic requester display names — one per dept. The HOD field comes
+// from the dept record, not from this list, so we don't have to invent
+// real staff names here.
+function requesterDisplayName(deptName) {
+  return `Requester - ${deptName}`;
+}
 
 let TOKEN = null;
 const authHeaders = (extra = {}) => ({
@@ -90,106 +83,107 @@ function nowISO() { return new Date().toISOString(); }
 
 (async () => {
   console.log('============================================================');
-  console.log('  Demo data seeder — departments + per-dept requesters');
+  console.log('  Demo data seeder — 17-dept HOD map + per-dept requesters');
   console.log('============================================================\n');
 
   await login();
   console.log('  Authenticated as admin\n');
 
-  // ── 1. Merge departments ────────────────────────────────────
-  const existingDepts = await getColl('departments');
-  const byName = new Map(existingDepts.map(d => [d.name.toLowerCase(), d]));
-  const merged = [];
-  let added = 0, updated = 0;
+  // ── 1. Replace departments wholesale ────────────────────────
+  const newDepts = DEPARTMENTS.map(d => ({
+    id: `dept_${d.short}`,
+    name: d.name,
+    hodName: d.hodName,
+    hodEmail: '',
+    coordinatorName: '',
+    coordinatorEmail: '',
+    createdAt: nowISO(),
+    updatedAt: nowISO()
+  }));
+  await putColl('departments', newDepts);
+  console.log(`  departments  REPLACED — now ${newDepts.length} rows (clean wipe)\n`);
 
-  for (let i = 0; i < DEPARTMENTS.length; i++) {
-    const seed = DEPARTMENTS[i];
-    const coord = seed.coordinatorName
-      ? { name: seed.coordinatorName, email: seed.coordinatorEmail }
-      : IT_COORDINATORS[i % IT_COORDINATORS.length];
-
-    const existing = byName.get(seed.name.toLowerCase());
-    const dept = {
-      id: existing ? existing.id : `dept_${seed.short}`,
-      name: seed.name,
-      hodName: seed.hodName,
-      hodEmail: seed.hodEmail,
-      coordinatorName: coord.name,
-      coordinatorEmail: coord.email,
-      createdAt: existing ? (existing.createdAt || nowISO()) : nowISO(),
-      updatedAt: nowISO()
-    };
-    merged.push(dept);
-    if (existing) updated++; else added++;
-    byName.delete(seed.name.toLowerCase());
-  }
-  // Preserve any pre-existing departments not in our seed list (don't nuke user data)
-  for (const leftover of byName.values()) merged.push(leftover);
-
-  await putColl('departments', merged);
-  console.log(`  departments  added ${added}, updated ${updated}, preserved ${byName.size} other`);
-  console.log(`               total now: ${merged.length}\n`);
-
-  // ── 2. Add one requester per clinical department ────────────
+  // ── 2. Surgical user update ─────────────────────────────────
+  // Keep every system user; drop per-dept requesters whose dept is no
+  // longer in the new list; add fresh per-dept requesters for every new
+  // dept; reassign the internal_requester to the new IT dept if needed.
   const existingUsers = await getColl('users');
-  const usernamesLower = new Set(existingUsers.map(u => String(u.username || '').toLowerCase()));
-  const finalUsers = [...existingUsers];
-  let userAdded = 0, userSkipped = 0;
+  const newDeptNames = new Set(newDepts.map(d => d.name));
   const hashedDefault = hashPassword(REQUESTER_PASSWORD);
 
-  for (const dept of DEPARTMENTS) {
-    if (dept.skipRequester) continue;
-    const username = `req_${dept.short}`;
-    if (usernamesLower.has(username)) { userSkipped++; continue; }
+  // Identify which users are per-dept requesters created by a previous
+  // run of this script (id starts with user_req_) — those are owned by
+  // this script and safe to remove + recreate.
+  const isPerDeptRequester = (u) => /^user_req_/.test(u.id);
 
-    finalUsers.push({
-      id: `user_req_${dept.short}`,
-      name: REQUESTER_NAMES[dept.short] || `Requester ${dept.name}`,
-      username,
-      password: hashedDefault,
-      role: 'requester',
-      email: `${username}@hospital.in`,
-      department: dept.name,
-      createdAt: nowISO(),
-      updatedAt: nowISO()
-    });
-    userAdded++;
+  // Other requester users (e.g. legacy user_req1/2/3) are NOT touched,
+  // but if their department no longer exists their HOD auto-fill will
+  // break in the form. We log a warning so the operator notices.
+  const orphanedLegacy = existingUsers.filter(u =>
+    u.role === 'requester' && !isPerDeptRequester(u) && !newDeptNames.has(u.department)
+  );
+  if (orphanedLegacy.length) {
+    console.log(`  [warn] ${orphanedLegacy.length} legacy requester(s) now in a department that does not exist:`);
+    orphanedLegacy.forEach(u => console.log(`         - ${u.username} (id=${u.id}, dept="${u.department}")`));
+    console.log('         Their SCRs are unaffected, but the form will not auto-fill the HOD.\n');
   }
 
-  if (userAdded > 0) await putColl('users', finalUsers);
-  console.log(`  requesters   added ${userAdded}, skipped ${userSkipped} (already exist)`);
-  console.log(`               login pattern: req_<dept>  /  ${REQUESTER_PASSWORD}\n`);
+  // Internal requester: reassign to "IT" if currently sitting in a
+  // department that just got removed.
+  const internalReq = existingUsers.find(u => u.role === 'internal_requester');
+  if (internalReq && !newDeptNames.has(internalReq.department)) {
+    const before = internalReq.department;
+    internalReq.department = 'IT';
+    internalReq.updatedAt = nowISO();
+    console.log(`  internal_requester ${internalReq.username}: dept "${before}" -> "IT"`);
+  }
+
+  // Build the final user list: everything that's not a per-dept
+  // requester + freshly seeded per-dept requesters.
+  const preserved = existingUsers.filter(u => !isPerDeptRequester(u));
+  const newPerDept = DEPARTMENTS.map(d => ({
+    id: `user_req_${d.short}`,
+    name: requesterDisplayName(d.name),
+    username: `req_${d.short}`,
+    password: hashedDefault,
+    role: 'requester',
+    email: `req_${d.short}@hospital.in`,
+    department: d.name,
+    createdAt: nowISO(),
+    updatedAt: nowISO()
+  }));
+
+  const finalUsers = [...preserved, ...newPerDept];
+  await putColl('users', finalUsers);
+  console.log(`  users        preserved ${preserved.length} + added ${newPerDept.length} per-dept requesters\n`);
 
   // ── 3. Verify ───────────────────────────────────────────────
   console.log('  --- verification ---');
   const finalDepts = await getColl('departments');
   const finalUsersCheck = await getColl('users');
 
-  const missingCoord = finalDepts.filter(d => !d.coordinatorName);
-  console.log(`  [${missingCoord.length === 0 ? 'PASS' : 'WARN'}] ` +
-    `every dept has an IT coordinator (${finalDepts.length - missingCoord.length}/${finalDepts.length})`);
+  console.log(`  [${finalDepts.length === DEPARTMENTS.length ? 'PASS' : 'FAIL'}] department count: ${finalDepts.length} (expected ${DEPARTMENTS.length})`);
 
-  const reqUsers = finalUsersCheck.filter(u => u.role === 'requester');
-  const deptsCovered = new Set(reqUsers.map(u => u.department));
-  const clinicalDepts = DEPARTMENTS.filter(d => !d.skipRequester).map(d => d.name);
-  const uncovered = clinicalDepts.filter(n => !deptsCovered.has(n));
-  console.log(`  [${uncovered.length === 0 ? 'PASS' : 'WARN'}] ` +
-    `every clinical dept has a requester (${clinicalDepts.length - uncovered.length}/${clinicalDepts.length})`);
-  if (uncovered.length) console.log(`         uncovered: ${uncovered.join(', ')}`);
+  const hodMismatch = DEPARTMENTS.filter(d => {
+    const live = finalDepts.find(x => x.name === d.name);
+    return !live || live.hodName !== d.hodName;
+  });
+  console.log(`  [${hodMismatch.length === 0 ? 'PASS' : 'FAIL'}] every dept has the correct HOD (${DEPARTMENTS.length - hodMismatch.length}/${DEPARTMENTS.length})`);
+  if (hodMismatch.length) hodMismatch.forEach(d => console.log(`         missing: ${d.name} -> ${d.hodName}`));
+
+  const reqUsers = finalUsersCheck.filter(u => u.role === 'requester' && isPerDeptRequester(u));
+  console.log(`  [${reqUsers.length === DEPARTMENTS.length ? 'PASS' : 'FAIL'}] per-dept requester count: ${reqUsers.length} (expected ${DEPARTMENTS.length})`);
 
   // Smoke-test one of the new logins so we know bcrypt round-trip works
-  const sample = finalUsersCheck.find(u => u.username === 'req_cardio');
-  if (sample) {
-    const r = await fetch(`${API}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'req_cardio', password: REQUESTER_PASSWORD })
-    });
-    console.log(`  [${r.ok ? 'PASS' : 'FAIL'}] sample login req_cardio/${REQUESTER_PASSWORD} -> ${r.status}`);
-  }
+  const sampleLogin = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'req_it', password: REQUESTER_PASSWORD })
+  });
+  console.log(`  [${sampleLogin.ok ? 'PASS' : 'FAIL'}] sample login req_it/${REQUESTER_PASSWORD} -> ${sampleLogin.status}`);
 
   console.log('\n============================================================');
-  console.log(`  Done. ${finalDepts.length} departments, ${reqUsers.length} requesters.`);
-  console.log('  Demo logins:  req_radio / req123, req_neuro / req123, etc.');
+  console.log(`  Done. ${finalDepts.length} departments, ${reqUsers.length} per-dept requesters.`);
+  console.log('  Demo logins:  req_it / req123, req_hr / req123, ...');
   console.log('============================================================');
 })().catch(e => { console.error('\nSEED FAILED:', e.message); process.exit(1); });

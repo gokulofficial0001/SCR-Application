@@ -1231,13 +1231,13 @@ const Store = {
       { id: 'user_dev2',   name: 'Mr. Yoganandham S',    username: 'developer2',   password: 'dev123',   role: 'developer',      email: 'yoga@hospital.in',            department: ITDept },
       { id: 'user_dev3',   name: 'Mr. Chakravarthy',     username: 'developer3',   password: 'dev123',   role: 'developer',      email: 'chakra@hospital.in',          department: ITDept },
       // Requesters (departmental — kept for legacy)
-      { id: 'user_req1',   name: 'Dr. Ramesh Kumar',     username: 'requester',    password: 'req123',   role: 'requester',      email: 'ramesh@hospital.in',          department: 'Cardiology' },
+      { id: 'user_req1',   name: 'Dr. Ramesh Kumar',     username: 'requester',    password: 'req123',   role: 'requester',      email: 'ramesh@hospital.in',          department: 'Lab' },
       { id: 'user_req2',   name: 'Dr. Priya Sharma',     username: 'requester2',   password: 'req123',   role: 'requester',      email: 'priya@hospital.in',           department: 'Radiology' },
       { id: 'user_req3',   name: 'Mr. Ganesh Babu',      username: 'requester3',   password: 'req123',   role: 'requester',      email: 'ganesh@hospital.in',          department: 'Pharmacy' },
       // Internal requester — IT-internal user who raises SCRs with the
       // technical fields pre-filled (received-by, study details, dev
       // assignment, PH name). Same self-service portal as Requester.
-      { id: 'user_internal_req', name: 'Mr. Vignesh Kumaran', username: 'internal',  password: 'int123',   role: 'internal_requester', email: 'vignesh@hospital.in',     department: 'Information Technology' }
+      { id: 'user_internal_req', name: 'Mr. Vignesh Kumaran', username: 'internal',  password: 'int123',   role: 'internal_requester', email: 'vignesh@hospital.in',     department: 'IT' }
     ];
 
     const existing = this._get('users') || [];
