@@ -14,8 +14,8 @@ const Workflow = {
     6: { name: 'QA & Closure',           advanceRoles: ['implementation', 'admin'], rejectRoles: ['implementation', 'admin'], requiredFields: [] }
   },
 
-  // Stage 4 is managed by approval.js; reject from stages 3/4 goes to 2; stage 6 reject goes to 5
-  _rejectTarget: { 2: null, 3: 2, 4: 2, 6: 5 }, // null = terminal rejection
+  // Stage 4 is managed by approval.js; reject from stages 3/4 goes to 2; stage 5 reject goes to 4; stage 6 reject goes to 5
+  _rejectTarget: { 2: null, 3: 2, 4: 2, 5: 4, 6: 5 }, // null = terminal rejection
 
   // ── Roles that can place an SCR on Hold at each stage ───
   // Mirrors the action roles for that stage (anyone who can act on
@@ -101,6 +101,11 @@ const Workflow = {
     if (!scr) return { success: false, error: 'SCR not found' };
     if (!this.canAdvance(scr)) return { success: false, error: 'You do not have permission to advance this stage' };
 
+    if (!Number.isInteger(scr.currentStage) || scr.currentStage < 1 || scr.currentStage > 6) {
+      console.error('Invalid currentStage for SCR', scr.id, ':', scr.currentStage);
+      throw new Error('Invalid SCR stage: ' + scr.currentStage);
+    }
+
     // Workflow gates — defense in depth alongside the UI gating
     if (scr.currentStage === 3 && !scr.phAcceptedBy) {
       return { success: false, error: 'Project Head must Accept for Review before advancing to Management Approval.' };
@@ -116,14 +121,19 @@ const Workflow = {
     const oldStage = scr.currentStage;
     const newStage = oldStage + 1;
 
-    this._moveToStage(scrId, oldStage, newStage, user, notes || `Advanced by ${user.name}`, 'In Progress');
+    const moveResult = this._moveToStage(scrId, oldStage, newStage, user, notes || `Advanced by ${user.name}`, 'In Progress', false, scr.updatedAt);
+    if (moveResult && moveResult.conflict) {
+      return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+    }
 
     // Auto-stamp "Received By" when the implementation team accepts the
     // request (stage 1 → 2). Only fills if currently empty so a manually
     // entered name (rare, but possible if impl team created the SCR) is
     // preserved. This is the moment IT formally takes ownership.
     if (oldStage === 1 && newStage === 2 && !scr.receivedBy) {
-      Store.update('scr_requests', scrId, { receivedBy: user.name });
+      // Re-fetch so updatedAt reflects the _moveToStage write above
+      const scrAfterMove = Store.getById('scr_requests', scrId);
+      Store.update('scr_requests', scrId, { receivedBy: user.name, _expectedUpdatedAt: scrAfterMove ? scrAfterMove.updatedAt : undefined });
       Audit.log('SCR', scrId, 'Auto-filled', 'receivedBy', null, user.name);
     }
 
@@ -135,7 +145,9 @@ const Workflow = {
     if (oldStage === 3 && newStage === 4 && user.role === 'project_head') {
       const oldName = scr.projectHeadName || '';
       if (oldName !== user.name) {
-        Store.update('scr_requests', scrId, { projectHeadName: user.name });
+        // Re-fetch so updatedAt reflects the _moveToStage write above
+        const scrAfterMove = Store.getById('scr_requests', scrId);
+        Store.update('scr_requests', scrId, { projectHeadName: user.name, _expectedUpdatedAt: scrAfterMove ? scrAfterMove.updatedAt : undefined });
         Audit.log('SCR', scrId, 'Auto-filled', 'projectHeadName', oldName, user.name);
       }
     }
@@ -154,12 +166,20 @@ const Workflow = {
     if (!scr) return { success: false, error: 'SCR not found' };
     if (!this.canClose(scr)) return { success: false, error: 'You do not have permission to close this ticket' };
 
+    if (!Number.isInteger(scr.currentStage) || scr.currentStage < 1 || scr.currentStage > 6) {
+      console.error('Invalid currentStage for SCR', scr.id, ':', scr.currentStage);
+      throw new Error('Invalid SCR stage: ' + scr.currentStage);
+    }
+
     const user = Auth.currentUser();
 
     const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 6 && !w.exitedAt);
     currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Closed' }));
 
-    Store.update('scr_requests', scrId, { status: 'Closed', completedOn: Utils.today() });
+    const closeResult = Store.update('scr_requests', scrId, { status: 'Closed', completedOn: Utils.today(), _expectedUpdatedAt: scr.updatedAt });
+    if (closeResult && closeResult.conflict) {
+      return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+    }
 
     Audit.log('SCR', scrId, 'Ticket Closed', 'status', 'In Progress', 'Closed', user.name, user.role);
 
@@ -178,6 +198,11 @@ const Workflow = {
     if (!scr) return { success: false, error: 'SCR not found' };
     if (!this.canReject(scr)) return { success: false, error: 'You do not have permission to reject this stage' };
     if (!remarks.trim()) return { success: false, error: 'Rejection remarks are required' };
+
+    if (!Number.isInteger(scr.currentStage) || scr.currentStage < 1 || scr.currentStage > 6) {
+      console.error('Invalid currentStage for SCR', scr.id, ':', scr.currentStage);
+      throw new Error('Invalid SCR stage: ' + scr.currentStage);
+    }
 
     const user = Auth.currentUser();
     const fromStage = scr.currentStage;
@@ -201,13 +226,17 @@ const Workflow = {
       const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
       currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Rejected', notes: remarks }));
 
-      Store.update('scr_requests', scrId, {
+      const terminalResult = Store.update('scr_requests', scrId, {
         status: 'Rejected',
         rejectionRemarks: remarks,
         rejectedBy: user.name,
         rejectedAt: Utils.nowISO(),
-        lastRejection: rejectionRecord
+        lastRejection: rejectionRecord,
+        _expectedUpdatedAt: scr.updatedAt
       });
+      if (terminalResult && terminalResult.conflict) {
+        return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+      }
 
       Audit.log('SCR', scrId, 'Rejected', 'status', 'In Progress', 'Rejected', user.name, user.role);
 
@@ -218,10 +247,15 @@ const Workflow = {
     }
 
     // Backward escalation
-    this._moveToStage(scrId, fromStage, targetStage, user, remarks, 'In Progress', true);
+    const rejectMoveResult = this._moveToStage(scrId, fromStage, targetStage, user, remarks, 'In Progress', true, scr.updatedAt);
+    if (rejectMoveResult && rejectMoveResult.conflict) {
+      return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+    }
 
     // Always record lastRejection so it can be tracked on every screen
-    Store.update('scr_requests', scrId, { lastRejection: rejectionRecord });
+    // Re-fetch so updatedAt reflects the _moveToStage write above
+    const scrAfterReject = Store.getById('scr_requests', scrId);
+    Store.update('scr_requests', scrId, { lastRejection: rejectionRecord, _expectedUpdatedAt: scrAfterReject ? scrAfterReject.updatedAt : undefined });
 
     Audit.log('SCR', scrId, 'Stage Rejected', 'currentStage', Utils.getStageName(fromStage), Utils.getStageName(targetStage), user.name, user.role);
 
@@ -243,7 +277,7 @@ const Workflow = {
     const user = Auth.currentUser();
     const heldAt = Utils.nowISO();
 
-    Store.update('scr_requests', scrId, {
+    const holdResult = Store.update('scr_requests', scrId, {
       status: 'On Hold',
       holdReason: reason.trim(),
       heldBy: user.id,
@@ -257,8 +291,12 @@ const Workflow = {
         byId: user.id,
         byRole: user.role,
         at: heldAt
-      }
+      },
+      _expectedUpdatedAt: scr.updatedAt
     });
+    if (holdResult && holdResult.conflict) {
+      return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+    }
 
     // Append a workflow note (do NOT exit the active stage — just record the hold)
     Store.add('workflow_stages', {
@@ -297,14 +335,18 @@ const Workflow = {
 
     const user = Auth.currentUser();
 
-    Store.update('scr_requests', scrId, {
+    const resumeResult = Store.update('scr_requests', scrId, {
       status: 'In Progress',
       // Clear active hold fields — keep lastHold for history
       holdReason: '',
       heldBy: '',
       heldAt: null,
-      holdAtStage: null
+      holdAtStage: null,
+      _expectedUpdatedAt: scr.updatedAt
     });
+    if (resumeResult && resumeResult.conflict) {
+      return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
+    }
 
     Store.add('workflow_stages', {
       scrId,
@@ -335,7 +377,12 @@ const Workflow = {
   },
 
   // ── Internal: move SCR to a given stage ─────────────────
-  _moveToStage(scrId, fromStage, toStage, user, notes, status, isRejection = false) {
+  _moveToStage(scrId, fromStage, toStage, user, notes, status, isRejection = false, expectedUpdatedAt = undefined) {
+    const stageFrom = Number(fromStage);
+    const stageTo   = Number(toStage);
+    if (!Number.isInteger(stageFrom)) throw new Error('Corrupt workflow_stages record: ' + JSON.stringify({ stage: fromStage }));
+    if (!Number.isInteger(stageTo))   throw new Error('Corrupt workflow_stages record: ' + JSON.stringify({ stage: toStage }));
+
     const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === fromStage && !w.exitedAt);
     currentWf.forEach(w => Store.update('workflow_stages', w.id, {
       exitedAt: Utils.nowISO(),
@@ -363,10 +410,22 @@ const Workflow = {
       scrPatch.phAcceptedAt = null;
     }
 
-    Store.update('scr_requests', scrId, scrPatch);
+    // Optimistic concurrency: include the client's known updatedAt so the
+    // server can reject the write with 409 if another user has already
+    // modified this record since we last fetched it.
+    if (expectedUpdatedAt !== undefined) {
+      scrPatch._expectedUpdatedAt = expectedUpdatedAt;
+    }
+
+    const patchResult = Store.update('scr_requests', scrId, scrPatch);
 
     if (toStage < 3) {
       Audit.log('SCR', scrId, 'Auto-cleared', 'phAcceptedBy', 'set', '(cleared on backward move)');
+    }
+
+    // Propagate conflict signal to caller
+    if (patchResult && patchResult.conflict) {
+      return { conflict: true };
     }
   },
 
@@ -460,7 +519,9 @@ const Workflow = {
     return `
       <div class="timeline">
         ${entries.map(entry => {
-          const stage = Utils.stages.find(s => s.id === entry.stage);
+          const stageNum = Number(entry.stage);
+          if (!Number.isInteger(stageNum)) throw new Error('Corrupt workflow_stages record: ' + JSON.stringify(entry));
+          const stage = Utils.stages.find(s => s.id === stageNum);
           const enterUser = Store.getById('users', entry.performedBy);
           const exitUser = entry.exitedBy ? Store.getById('users', entry.exitedBy) : null;
           const isCompleted = !!entry.exitedAt;

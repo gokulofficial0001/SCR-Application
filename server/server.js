@@ -4,7 +4,7 @@ const path = require('path');
 const os = require('os');
 const { router: apiRouter, metaRoutes, adminRoutes, healthHandler } = require('./routes');
 const authRoutes = require('./auth-routes');
-const { requireAuth, requireAdmin, loginLimiter } = require('./middleware');
+const { requireAuth, requireAdmin, loginLimiter, apiLimiter } = require('./middleware');
 const { DB_PATH } = require('./db');
 
 const PORT = parseInt(process.env.PORT || '3500', 10);
@@ -42,20 +42,43 @@ app.use(cors({
 }));
 
 // strict:false so primitive meta values (true, numbers) parse
-app.use(express.json({ limit: '20mb', strict: false }));
+// Global limit is kept small to prevent DoS; /api/admin/import gets its own
+// larger limit via route-specific middleware applied in server.js below.
+app.use(express.json({ limit: '100kb', strict: false }));
 
-// Cache + light security headers
+// Cache headers
 app.use((req, res, next) => {
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
     'Pragma': 'no-cache',
-    'Expires': '0',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'SAMEORIGIN',
-    'Referrer-Policy': 'no-referrer'
+    'Expires': '0'
   });
   next();
 });
+
+// Security headers (VULN-006: CSP + anti-clickjacking + MIME sniffing prevention)
+app.use((req, res, next) => {
+  // Prevent clickjacking
+  res.setHeader('X-Frame-Options', 'DENY')
+  // Prevent MIME sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  // Basic XSS protection header (legacy browsers)
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  // Referrer policy
+  res.setHeader('Referrer-Policy', 'same-origin')
+  // Content Security Policy — restricts what resources the page can load
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data:; " +
+    "connect-src 'self'; " +
+    "frame-ancestors 'none'; " +
+    "form-action 'self'"
+  )
+  next()
+})
 
 // ── Block source-code / config paths from being served as static files ──
 // Without this, GET /server/db.js, /server/routes.js etc. would leak the
@@ -90,11 +113,18 @@ app.use('/api/auth', authRoutes);
 // ═══════════════════════════════════════════════════════════
 //  AUTH GATE — everything below requires a valid Bearer token
 // ═══════════════════════════════════════════════════════════
+// General API rate limiter (DoS prevention): 500 req / 15 min per IP.
+// Applied before the auth gate so unauthenticated flood is also throttled.
+// Health check is mounted above this and is exempt.
+app.use('/api', apiLimiter);
 app.use('/api', requireAuth);
 
-// ── Admin-only mutations ──
+// ── Admin-only routes (GET snapshot + all mutating endpoints) ──
+app.get('/api/admin/snapshot',                                                  requireAdmin);
 app.post('/api/admin/reset',  requireAdmin);
-app.post('/api/admin/import', requireAdmin);
+// Import may carry large payloads (full DB snapshot); allow up to 20 MB on
+// this single route only so the global 100 kb cap is not weakened globally.
+app.post('/api/admin/import', express.json({ limit: '20mb', strict: false }), requireAdmin);
 app.put('/api/meta/:key',     requireAdmin);
 app.delete('/api/meta/:key',  requireAdmin);
 // User/department/sla writes require admin too (privilege-escalation guard)

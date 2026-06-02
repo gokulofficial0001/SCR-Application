@@ -105,8 +105,8 @@ const Notifications = {
       <div class="notif-panel-header">
         <h4 style="font-size:var(--font-md);font-weight:var(--font-weight-semi)">Notifications</h4>
         <div style="display:flex;gap:var(--space-2)">
-          <button class="btn btn-ghost btn-sm" onclick="Notifications.markAllRead();Notifications.renderPanel()">Mark all read</button>
-          <button class="btn btn-ghost btn-sm" onclick="Notifications.togglePanel()">✕</button>
+          <button class="btn btn-ghost btn-sm" id="notif-panel-mark-all">Mark all read</button>
+          <button class="btn btn-ghost btn-sm" id="notif-panel-close">✕</button>
         </div>
       </div>
       <div class="notif-panel-body">
@@ -116,7 +116,7 @@ const Notifications = {
             <p class="empty-state-text">No notifications yet</p>
           </div>
         ` : notifs.map(n => `
-          <div class="notif-item ${n.read ? '' : 'unread'}" onclick="Notifications.handleClick('${n.id}', '${n.scrId || ''}')">
+          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${Utils.escapeHtml(n.id)}" data-scr-id="${Utils.escapeHtml(n.scrId || '')}" style="cursor:pointer">
             ${!n.read ? '<div class="notif-dot"></div>' : '<div style="width:8px"></div>'}
             <div>
               <div class="notif-text">${Utils.escapeHtml(n.message)}</div>
@@ -127,10 +127,37 @@ const Notifications = {
       </div>
       ${notifs.length > 0 ? `
         <div style="padding:var(--space-3);border-top:var(--glass-border);text-align:center">
-          <button class="btn btn-ghost btn-sm" onclick="Notifications.togglePanel();Router.navigate('notifications')">View All</button>
+          <button class="btn btn-ghost btn-sm" id="notif-panel-view-all">View All</button>
         </div>
       ` : ''}
     `;
+
+    // Delegated click handler for notification items (safe — values read from dataset, not HTML)
+    panel.addEventListener('click', function handlePanelClick(e) {
+      // Mark-all button
+      if (e.target.closest('#notif-panel-mark-all')) {
+        Notifications.markAllRead();
+        Notifications.renderPanel();
+        return;
+      }
+      // Close button
+      if (e.target.closest('#notif-panel-close')) {
+        Notifications.togglePanel();
+        return;
+      }
+      // View-all button
+      if (e.target.closest('#notif-panel-view-all')) {
+        Notifications.togglePanel();
+        Router.navigate('notifications');
+        return;
+      }
+      // Individual notification item
+      const item = e.target.closest('[data-notif-id]');
+      if (!item) return;
+      const id = item.dataset.notifId;
+      const scrId = item.dataset.scrId;
+      Notifications.handleClick(id, scrId);
+    });
   },
 
   // ── Handle notification click ───────────────────────────
@@ -146,7 +173,7 @@ const Notifications = {
   renderPage() {
     const notifs = this.getForCurrentUser();
 
-    return `
+    const html = `
       <div class="page-header">
         <div class="page-header-left">
           <div class="flex items-center gap-3">
@@ -155,13 +182,13 @@ const Notifications = {
           </div>
           <p class="page-description">All your notifications in one place</p>
         </div>
-        <button class="btn btn-ghost" onclick="Notifications.markAllRead();Router.navigate('notifications')">
+        <button class="btn btn-ghost" id="notif-page-mark-all">
           ✓ Mark All Read
         </button>
       </div>
 
       <div class="card">
-        <div class="card-body">
+        <div class="card-body" id="notif-page-list">
           ${notifs.length === 0 ? `
             <div class="empty-state">
               <div class="empty-state-icon">🔔</div>
@@ -169,11 +196,11 @@ const Notifications = {
               <p class="empty-state-text">You have no notifications</p>
             </div>
           ` : notifs.map(n => `
-            <div class="notif-item ${n.read ? '' : 'unread'}" onclick="Notifications.markRead('${n.id}');${n.scrId ? `Router.navigate('scr-detail',{id:'${n.scrId}'})` : ''}" style="border-radius:var(--radius-md);margin-bottom:var(--space-1)">
+            <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${Utils.escapeHtml(n.id)}" data-scr-id="${Utils.escapeHtml(n.scrId || '')}" style="border-radius:var(--radius-md);margin-bottom:var(--space-1);cursor:pointer">
               ${!n.read ? '<div class="notif-dot"></div>' : '<div style="width:8px"></div>'}
               <div style="flex:1">
                 <div class="notif-text">${Utils.escapeHtml(n.message)}</div>
-                <div class="notif-time">${Utils.formatTimeAgo(n.timestamp)} · ${Notifications.typeLabel(n.type)}</div>
+                <div class="notif-time">${Utils.formatTimeAgo(n.timestamp)} · ${Utils.escapeHtml(Notifications.typeLabel(n.type))}</div>
               </div>
               ${n.scrId ? '<span class="text-xs text-brand">View →</span>' : ''}
             </div>
@@ -181,6 +208,34 @@ const Notifications = {
         </div>
       </div>
     `;
+
+    // Attach delegated listeners after the caller inserts the returned HTML into the DOM.
+    // Use a one-time rAF so the elements are present when we query them.
+    requestAnimationFrame(function attachNotifPageHandlers() {
+      const markAllBtn = document.getElementById('notif-page-mark-all');
+      if (markAllBtn) {
+        markAllBtn.addEventListener('click', function() {
+          Notifications.markAllRead();
+          Router.navigate('notifications');
+        });
+      }
+
+      const list = document.getElementById('notif-page-list');
+      if (list) {
+        list.addEventListener('click', function handlePageClick(e) {
+          const item = e.target.closest('[data-notif-id]');
+          if (!item) return;
+          const id = item.dataset.notifId;
+          const scrId = item.dataset.scrId;
+          Notifications.markRead(id);
+          if (scrId) {
+            Router.navigate('scr-detail', { id: scrId });
+          }
+        });
+      }
+    });
+
+    return html;
   },
 
   typeLabel(type) {

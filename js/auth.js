@@ -89,6 +89,11 @@ const Auth = {
     delete this._failedAttempts[key];
     delete this._lockoutUntil[key];
 
+    // Normalise role to lowercase so permission lookups are case-insensitive
+    if (data.user) {
+      data.user.role = (data.user.role || '').toLowerCase().trim();
+    }
+
     const session = {
       ...data.user,
       token: data.token,
@@ -135,6 +140,8 @@ const Auth = {
       if (!res.ok) return false;
       const data = await res.json();
       if (data && data.user) {
+        // Normalise role on token refresh so stale uppercase values are corrected
+        data.user.role = (data.user.role || '').toLowerCase().trim();
         Store.setSession({ ...session, ...data.user, expiresAt: data.expiresAt });
       }
       return true;
@@ -161,7 +168,8 @@ const Auth = {
   canAccessPage(page) {
     const user = this.currentUser();
     if (!user) return false;
-    const perms = this._getPermissions()[user.role];
+    const role = (user.role || '').toLowerCase();
+    const perms = this._getPermissions()[role];
     if (!perms) return false;
     return perms.pages.includes(page);
   },
@@ -169,7 +177,8 @@ const Auth = {
   canPerformAction(action) {
     const user = this.currentUser();
     if (!user) return false;
-    const perms = this._getPermissions()[user.role];
+    const role = (user.role || '').toLowerCase();
+    const perms = this._getPermissions()[role];
     if (!perms) return false;
     return perms.actions.includes(action);
   },
@@ -177,14 +186,16 @@ const Auth = {
   hasRole(...roles) {
     const user = this.currentUser();
     if (!user) return false;
-    return roles.includes(user.role);
+    const role = (user.role || '').toLowerCase();
+    return roles.includes(role);
   },
 
   // ── Get default page for role ───────────────────────────
   getDefaultPage() {
     const user = this.currentUser();
     if (!user) return 'login';
-    if (user.role === 'requester' || user.role === 'internal_requester') return 'self-service';
+    const role = (user.role || '').toLowerCase();
+    if (role === 'requester' || role === 'internal_requester') return 'self-service';
     return 'dashboard';
   },
 

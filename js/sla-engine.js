@@ -3,6 +3,30 @@
    ============================================================ */
 
 const SLAEngine = {
+  // ── Compute total On Hold hours for an SCR ───────────────
+  // Pairs 'On Hold' workflow_stages records (by enteredAt) with the
+  // next 'Resumed' record to build closed intervals. An open hold
+  // (SCR still On Hold, no matching Resume yet) uses now as the end.
+  getHoldDurationHours(scrId, workflowStages) {
+    const entries = (workflowStages || [])
+      .filter(w => w.scrId === scrId)
+      .sort((a, b) => new Date(a.enteredAt) - new Date(b.enteredAt));
+
+    const holds   = entries.filter(w => w.action === 'On Hold');
+    const resumes = entries.filter(w => w.action === 'Resumed');
+
+    let totalMs = 0;
+    holds.forEach(hold => {
+      const holdStart = new Date(hold.enteredAt);
+      // Find the first resume that occurred after this hold started
+      const resume = resumes.find(r => new Date(r.enteredAt) > holdStart);
+      const holdEnd = resume ? new Date(resume.enteredAt) : new Date();
+      totalMs += Math.max(0, holdEnd - holdStart);
+    });
+
+    return totalMs / (1000 * 60 * 60);
+  },
+
   // ── Get SLA config for priority ─────────────────────────
   getMaxHours(priority) {
     const config = Store.getAll('sla_config');
@@ -14,7 +38,10 @@ const SLAEngine = {
   },
 
   // ── Calculate SLA status for an SCR ─────────────────────
-  calculate(scr) {
+  // workflowStages is optional: when omitted the function fetches
+  // all workflow_stages from the store itself (convenient for
+  // callers that do not already hold the array).
+  calculate(scr, workflowStages) {
     if (!scr) {
       return { status: 'unknown', label: '—', percent: 0, color: 'neutral', remaining: 0 };
     }
@@ -30,18 +57,24 @@ const SLAEngine = {
       return { status: 'unknown', label: 'Pending', percent: 0, color: 'neutral', remaining: 0 };
     }
 
+    const allWorkflowStages = workflowStages || Store.getAll('workflow_stages');
     const maxHours = this.getMaxHours(scr.priority);
-    const elapsed = Utils.hoursBetween(scr.createdAt, null);
-    const remaining = maxHours - elapsed;
-    const percent = Math.min(100, Math.round((elapsed / maxHours) * 100));
+    const totalElapsedHours = Utils.hoursBetween(scr.createdAt, null);
+    const holdHours = this.getHoldDurationHours(scr.id, allWorkflowStages);
+    const effectiveElapsed = Math.max(0, totalElapsedHours - holdHours);
+    const remaining = maxHours - effectiveElapsed;
+    const percent = Math.min(100, Math.round((effectiveElapsed / maxHours) * 100));
 
     if (remaining <= 0) {
-      return { status: 'breached', label: `Overdue by ${Math.abs(remaining)}h`, percent: 100, color: 'danger', remaining };
+      const displayHours = Math.round(Math.abs(remaining) * 10) / 10;
+      return { status: 'breached', label: `Overdue by ${displayHours}h`, percent: 100, color: 'danger', remaining };
     }
     if (percent >= 75) {
-      return { status: 'at-risk', label: `${remaining}h remaining`, percent, color: 'warning', remaining };
+      const displayHours = Math.round(Math.abs(remaining) * 10) / 10;
+      return { status: 'at-risk', label: `${displayHours}h remaining`, percent, color: 'warning', remaining };
     }
-    return { status: 'on-track', label: `${remaining}h remaining`, percent, color: 'success', remaining };
+    const displayHours = Math.round(Math.abs(remaining) * 10) / 10;
+    return { status: 'on-track', label: `${displayHours}h remaining`, percent, color: 'success', remaining };
   },
 
   // ── Get all overdue SCRs ────────────────────────────────

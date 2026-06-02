@@ -25,8 +25,16 @@ const Approval = {
     if (scr.status === 'On Hold') return false;  // resume before approving
     if (!this.approvalChain.includes(user.role)) return false;
 
-    // Conflict-of-interest: an approver cannot sign off on their own request
-    if (scr.createdBy === user.id) return false;
+    // Conflict-of-interest: no involved party may approve their own SCR.
+    // Covers the original requester, both assigned developers, and the
+    // project head who accepted the SCR at Stage 3.
+    const involvedParties = [
+      scr.createdBy,
+      scr.assignedDeveloper,
+      scr.assignedDeveloper2,
+      scr.phAcceptedBy,
+    ].filter(Boolean); // remove null/undefined/empty entries
+    if (involvedParties.includes(user.id)) return false;
 
     // Already decided for THIS attempt at stage 4?
     // Filter to decisions recorded after SCR entered current stage 4
@@ -41,11 +49,27 @@ const Approval = {
     return existing.length === 0;
   },
 
-  // Both AGM and CIO have approved?
+  // Returns the timestamp (ms) when Stage 4 was most recently entered for this SCR.
+  // Returns 0 if no workflow_stages entry exists (treats all approvals as in-scope,
+  // which is safe because canApprove() will have already gated submission).
+  _getStage4EnteredAt(scrId) {
+    const stageEntry = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 4)
+      .sort((a, b) => new Date(b.enteredAt) - new Date(a.enteredAt))[0];
+    return stageEntry ? new Date(stageEntry.enteredAt).getTime() : 0;
+  },
+
+  // Both AGM-IT and CIO have approved in the CURRENT Stage-4 cycle?
+  // DEF-001 FIX: filter approvals to only those recorded after Stage 4 was
+  // most recently entered, so prior-cycle approvals are never counted.
   _bothApproved(scrId) {
+    const stageEnteredAt = this._getStage4EnteredAt(scrId);
     return this.approvalChain.every(role => {
-      const decision = Store.filter('approvals', a => a.scrId === scrId && a.approverRole === role);
-      return decision.length > 0 && decision[decision.length - 1].decision === 'Approved';
+      const decisions = Store.filter('approvals', a =>
+        a.scrId === scrId &&
+        a.approverRole === role &&
+        new Date(a.timestamp).getTime() >= stageEnteredAt
+      );
+      return decisions.length > 0 && decisions[decisions.length - 1].decision === 'Approved';
     });
   },
 
@@ -252,7 +276,14 @@ const Approval = {
       if (scr.currentStage !== 4) return false;
       if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
       if (!this.approvalChain.includes(user.role)) return false;
-      const userApproval = Store.filter('approvals', a => a.scrId === scr.id && a.approverRole === user.role);
+      // DEF-002 FIX: only count approvals from the current Stage-4 cycle so
+      // that a manager who approved in a prior cycle is shown as pending again.
+      const stageEnteredAt = this._getStage4EnteredAt(scr.id);
+      const userApproval = Store.filter('approvals', a =>
+        a.scrId === scr.id &&
+        a.approverRole === user.role &&
+        new Date(a.timestamp).getTime() >= stageEnteredAt
+      );
       return userApproval.length === 0;
     });
 

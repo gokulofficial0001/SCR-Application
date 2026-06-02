@@ -45,12 +45,24 @@ function requireAdmin(req, res, next) {
 // ── loginLimiter ───────────────────────────────────────────
 // Brute-force defence on the login endpoint. Per-IP cap; bypasses the
 // in-memory client-side lockout which doesn't survive a page reload.
+// Hospital intranet policy: 5 attempts per 15-minute window (VULN-011).
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,   // 15 minutes
-  max: 20,                    // 20 attempts per IP per window
+  max: 5,                     // 5 attempts per IP per window
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many login attempts — please try again in 15 minutes.' }
+  message: { error: 'Too many login attempts. Please wait 15 minutes before trying again.' }
 });
 
-module.exports = { requireAuth, requireAdmin, loginLimiter };
+// ── apiLimiter ─────────────────────────────────────────────
+// General API abuse prevention. Apply to all API routes in server.js:
+// app.use('/api', apiLimiter)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15 minutes
+  max: 500,                   // 500 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests' }
+});
+
+module.exports = { requireAuth, requireAdmin, loginLimiter, apiLimiter };

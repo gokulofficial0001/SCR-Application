@@ -1739,8 +1739,8 @@ const SCRManager = {
       warning.classList.remove('hidden');
       list.innerHTML = dupes.map(d => `
         <div class="flex items-center gap-2 mb-1">
-          <span class="text-sm font-medium text-brand">${d.scrNumber}</span>
-          <span class="text-xs text-secondary">${Utils.truncate(d.description, 50)}</span>
+          <span class="text-sm font-medium text-brand">${Utils.escapeHtml(d.scrNumber)}</span>
+          <span class="text-xs text-secondary">${Utils.escapeHtml(Utils.truncate(d.description, 50))}</span>
           ${Utils.statusBadge(d.status)}
         </div>
       `).join('');

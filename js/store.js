@@ -32,27 +32,60 @@ const Store = {
 
   // ── Hydrate from server (call once on App.init) ─────────
   async hydrate() {
-    const res = await fetch('/api/admin/snapshot', {
-      cache: 'no-store',
-      headers: this._authToken ? { 'Authorization': `Bearer ${this._authToken}` } : {}
-    });
-    if (res.status === 401) throw new Error('Authentication required');
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    const snap = await res.json();
+    try {
+      const res = await fetch('/api/admin/snapshot', {
+        cache: 'no-store',
+        headers: this._authToken ? { 'Authorization': `Bearer ${this._authToken}` } : {}
+      });
+      if (res.status === 401) throw new Error('Authentication required');
+      if (!res.ok) throw new Error('Hydration failed: ' + res.status);
+      const snap = await res.json();
 
-    this._cache = {};
-    this.COLLECTIONS.forEach(c => {
-      this._cache[c] = Array.isArray(snap[c]) ? snap[c] : [];
-    });
-    this._meta = (snap && snap._meta) || {};
-    this._ready = true;
+      this._cache = {};
+      this.COLLECTIONS.forEach(c => {
+        this._cache[c] = Array.isArray(snap[c]) ? snap[c] : [];
+      });
+      this._meta = (snap && snap._meta) || {};
+      this._ready = true;
 
-    // First-run migration: if server is empty but THIS browser has
-    // pre-backend localStorage data, push it up so nothing is lost.
-    const serverHasData = this._meta.seeded === true;
-    const localHasData = typeof localStorage !== 'undefined' && localStorage.getItem('scr_seeded') === 'true';
-    if (!serverHasData && localHasData) {
-      await this._migrateLocalStorageToServer();
+      // First-run migration: if server is empty but THIS browser has
+      // pre-backend localStorage data, push it up so nothing is lost.
+      const serverHasData = this._meta.seeded === true;
+      const localHasData = typeof localStorage !== 'undefined' && localStorage.getItem('scr_seeded') === 'true';
+      if (!serverHasData && localHasData) {
+        await this._migrateLocalStorageToServer();
+      }
+    } catch (err) {
+      this._ready = false;
+
+      // Attempt localStorage fallback (pre-server era data)
+      const localHasData = typeof localStorage !== 'undefined' && localStorage.getItem('scr_seeded') === 'true';
+      if (localHasData) {
+        this._cache = {};
+        for (const c of this.COLLECTIONS) {
+          try {
+            const raw = localStorage.getItem(`scr_${c}`);
+            this._cache[c] = raw ? JSON.parse(raw) : [];
+          } catch { this._cache[c] = []; }
+        }
+        this._meta = {};
+        for (const k of this.META_KEYS) {
+          try {
+            const raw = localStorage.getItem(`scr_${k}`);
+            if (raw) this._meta[k] = JSON.parse(raw);
+          } catch {}
+        }
+        console.warn('Store: server hydration failed — running from localStorage fallback:', err);
+      } else {
+        console.error('Store: server hydration failed, no localStorage fallback available:', err);
+      }
+
+      // Show a visible error banner so the user knows the server is unreachable
+      if (typeof document !== 'undefined' && !document.getElementById('_scr_hydration_err')) {
+        document.body.insertAdjacentHTML('afterbegin', '<div id="_scr_hydration_err" style="background:red;color:white;padding:12px;text-align:center;position:fixed;top:0;left:0;right:0;z-index:9999">Server connection error. Please refresh the page.</div>');
+      }
+
+      throw err; // re-throw so App.init can handle it
     }
   },
 
@@ -100,6 +133,7 @@ const Store = {
   },
 
   async commitBootBatch() {
+    if (!this._ready) return;
     this._bootBatch = false;
     const colls = [...this._bootDirty.collections];
     const metas = [...this._bootDirty.meta];
@@ -215,6 +249,7 @@ const Store = {
   // Replay queued writes in order. Stops at the first failure (server
   // still down) and tries again on the next tick. Safe to call often.
   async _flushQueue() {
+    if (!this._ready) return;
     if (this._flushing || this._writeQueue.length === 0) return;
     this._flushing = true;
     let flushed = 0;
@@ -302,10 +337,7 @@ const Store = {
 
   // ── Routine pruning — operates on cache, flushes via _set ──
   pruneRoutine() {
-    const audit = this._get('audit_log') || [];
-    if (audit.length > 2000) {
-      this._set('audit_log', audit.slice(-2000));
-    }
+    // Audit log entries retained indefinitely per NABH compliance requirements — do not prune
 
     const now = Date.now();
     const cutoff = now - 90 * 86400000;
@@ -565,7 +597,8 @@ const Store = {
       project_head:   { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','hold','view_audit'] },
       implementation: { pages: ['dashboard','scr-list','scr-detail','scr-create','feedback','audit','notifications'], actions: ['create_scr','edit_scr','assign_scr','advance_stage','reject','hold','close_ticket','view_audit'] },
       developer:      { pages: ['dashboard','scr-list','scr-detail','feedback','notifications'], actions: ['edit_scr','advance_stage'] },
-      requester:      { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','submit_feedback'] }
+      requester:          { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','submit_feedback'] },
+      internal_requester: { pages: ['self-service','scr-detail','scr-create','feedback','notifications'], actions: ['create_scr','edit_scr','submit_feedback'] }
     });
 
     // Sample SCR Requests (with full 10-section fields)
@@ -1345,7 +1378,9 @@ const Store = {
   // Wipes the SQLite DB on the server, clears the local cache, and
   // re-runs seed/migrate so the demo state comes back fresh.
   async resetAll() {
-    const res = await fetch('/api/admin/reset', { method: 'POST' });
+    const headers = { 'Content-Type': 'application/json' };
+    if (this._authToken) headers['Authorization'] = 'Bearer ' + this._authToken;
+    const res = await fetch('/api/admin/reset', { method: 'POST', headers });
     if (!res.ok) {
       console.error('Reset failed:', res.status);
       if (typeof Utils !== 'undefined' && Utils.toast) {

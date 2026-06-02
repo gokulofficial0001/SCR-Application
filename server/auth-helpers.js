@@ -27,8 +27,14 @@ function verifyPassword(plain, stored) {
     try { ok = bcrypt.compareSync(plain, stored); } catch { ok = false; }
     return { ok, needsUpgrade: false };
   }
-  // Legacy plaintext path — equal? if yes, caller should re-hash and save.
-  return { ok: plain === stored, needsUpgrade: plain === stored };
+  // Legacy plaintext path — use timingSafeEqual to prevent timing attacks.
+  // Buffers must be the same length; a length mismatch is itself a safe false.
+  const inputBuf = Buffer.from(plain, 'utf8');
+  const storedBuf = Buffer.from(stored, 'utf8');
+  const safeEqual = inputBuf.length === storedBuf.length &&
+    crypto.timingSafeEqual(inputBuf, storedBuf);
+  // needsUpgrade=true signals the caller to re-hash and persist the bcrypt hash.
+  return { ok: safeEqual, needsUpgrade: safeEqual };
 }
 
 // Cryptographically strong, URL-safe session token.

@@ -6,7 +6,14 @@ const nowISO = () => new Date().toISOString();
 
 const CASCADE_ON_SCR_DELETE = ['workflow_stages', 'approvals', 'feedback', 'notifications', 'development_updates'];
 
-const isValidColl = (c) => COLLECTIONS.includes(c);
+// VULN-002: explicit allowlist — every handler that interpolates coll into SQL
+// must validate against this Set before executing any query.
+const ALLOWED_COLLS = new Set([
+  'users', 'departments', 'scr_requests', 'workflow_stages', 'approvals',
+  'feedback', 'notifications', 'development_updates', 'audit_log', 'sla_config'
+]);
+
+const isValidColl = (c) => ALLOWED_COLLS.has(c);
 
 router.param('coll', (req, res, next, coll) => {
   if (!isValidColl(coll)) return res.status(404).json({ error: `Unknown collection: ${coll}` });
@@ -14,12 +21,21 @@ router.param('coll', (req, res, next, coll) => {
 });
 
 router.get('/:coll', (req, res) => {
-  const rows = db.prepare(`SELECT data FROM ${req.params.coll}`).all();
-  res.json(rows.map(r => JSON.parse(r.data)));
+  const coll = req.params.coll;
+  const rows = db.prepare(`SELECT data FROM ${coll}`).all();
+  res.json(rows.map(r => {
+    const parsed = JSON.parse(r.data);
+    if (coll === 'users') { delete parsed.password; }
+    return parsed;
+  }));
 });
 
 router.put('/:coll', (req, res) => {
   const coll = req.params.coll;
+  const PROTECTED_COLLS = ['users', 'approvals', 'audit_log', 'workflow_stages', 'sessions', 'scr_requests'];
+  if (PROTECTED_COLLS.includes(coll) && req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: admin only' });
+  }
   const items = Array.isArray(req.body) ? req.body : [];
   const tx = db.transaction(() => {
     db.prepare(`DELETE FROM ${coll}`).run();
@@ -34,9 +50,12 @@ router.put('/:coll', (req, res) => {
 });
 
 router.get('/:coll/:id', (req, res) => {
-  const row = db.prepare(`SELECT data FROM ${req.params.coll} WHERE id = ?`).get(req.params.id);
+  const coll = req.params.coll;
+  const row = db.prepare(`SELECT data FROM ${coll} WHERE id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json(JSON.parse(row.data));
+  const parsed = JSON.parse(row.data);
+  if (coll === 'users') { delete parsed.password; }
+  res.json(parsed);
 });
 
 router.post('/:coll', (req, res) => {
@@ -45,8 +64,15 @@ router.post('/:coll', (req, res) => {
   if (!item.id) return res.status(400).json({ error: 'id required' });
   item.createdAt = item.createdAt || nowISO();
   item.updatedAt = nowISO();
-  db.prepare(`INSERT OR REPLACE INTO ${coll} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-    .run(item.id, JSON.stringify(item), item.createdAt, item.updatedAt);
+  const stmt = db.prepare(`INSERT INTO ${coll} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`);
+  try {
+    stmt.run(item.id, JSON.stringify(item), item.createdAt, item.updatedAt);
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || (err.message && err.message.includes('UNIQUE'))) {
+      return res.status(409).json({ error: 'Conflict: record already exists. Use PATCH to update.' });
+    }
+    throw err;
+  }
   res.json(item);
 });
 
@@ -56,7 +82,12 @@ router.patch('/:coll/:id', (req, res) => {
   const updates = req.body || {};
   const row = db.prepare(`SELECT data FROM ${coll} WHERE id = ?`).get(id);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  const merged = { ...JSON.parse(row.data), ...updates, updatedAt: nowISO() };
+  const current = JSON.parse(row.data);
+  if (updates._expectedUpdatedAt && current.updatedAt && current.updatedAt !== updates._expectedUpdatedAt) {
+    return res.status(409).json({ error: 'Conflict: record was updated by another user. Please refresh and retry.' });
+  }
+  delete updates._expectedUpdatedAt; // remove before saving
+  const merged = { ...current, ...updates, updatedAt: nowISO() };
   db.prepare(`UPDATE ${coll} SET data = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(merged), merged.updatedAt, id);
   res.json(merged);

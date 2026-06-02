@@ -30,9 +30,13 @@ const Feedback = {
       return { success: false, error: 'Feedback can only be submitted on completed or closed SCRs' };
     }
 
-    // Only the requester (creator) or admin can submit — prevents dev rating own work
-    if (scr.createdBy !== user.id && user.role !== 'admin') {
-      return { success: false, error: 'Only the requester can submit feedback for this SCR' };
+    // Only requesters/internal_requesters who are the SCR creator may submit — prevents devs or managers rating their own work
+    const allowedRoles = ['requester', 'internal_requester'];
+    if (!allowedRoles.includes(user.role)) {
+      return { success: false, error: 'Only requesters can submit feedback for an SCR' };
+    }
+    if (scr.createdBy !== user.id) {
+      return { success: false, error: 'Only the requester who raised this SCR can submit feedback' };
     }
 
     // Prevent duplicate feedback
@@ -197,7 +201,7 @@ const Feedback = {
             <p class="text-sm text-secondary">"${Utils.escapeHtml(fb.comments)}"</p>
           </div>
         ` : ''}
-        <p class="text-xs text-muted mt-2">Submitted by ${user ? user.name : 'Unknown'} · ${Utils.formatDate(fb.timestamp)}</p>
+        <p class="text-xs text-muted mt-2">Submitted by ${user ? Utils.escapeHtml(user.name) : 'Unknown'} · ${Utils.formatDate(fb.timestamp)}</p>
       `;
     }).join('<hr style="border-color:var(--color-border);margin:var(--space-4) 0">');
   },
@@ -281,8 +285,8 @@ const Feedback = {
                   const scoreColor = fb.avgScore >= 4 ? 'success' : fb.avgScore >= 3 ? 'primary' : fb.avgScore >= 2 ? 'warning' : 'danger';
                   return `
                     <tr style="cursor:pointer" onclick="Router.navigate('scr-detail',{id:'${fb.scrId}'})">
-                      <td class="font-semi text-brand">${scr ? scr.scrNumber : '—'}</td>
-                      <td class="text-sm">${scr ? scr.department : '—'}</td>
+                      <td class="font-semi text-brand">${scr ? Utils.escapeHtml(scr.scrNumber) : '—'}</td>
+                      <td class="text-sm">${scr ? Utils.escapeHtml(scr.department) : '—'}</td>
                       <td class="text-center">${fb.q1}/5</td>
                       <td class="text-center">${fb.q2}/5</td>
                       <td class="text-center">${fb.q3}/5</td>
@@ -312,8 +316,8 @@ const Feedback = {
               <div class="card mb-3">
                 <div class="flex items-center justify-between">
                   <div>
-                    <span class="font-semi text-brand">${scr.scrNumber}</span>
-                    <span class="text-sm text-secondary ml-2">${scr.department}</span>
+                    <span class="font-semi text-brand">${Utils.escapeHtml(scr.scrNumber)}</span>
+                    <span class="text-sm text-secondary ml-2">${Utils.escapeHtml(scr.department)}</span>
                     <p class="text-sm text-tertiary mt-1">${Utils.truncate(scr.description, 80)}</p>
                   </div>
                   <button class="btn btn-outline btn-sm" onclick="Feedback.showForm('${scr.id}')">📝 Give Feedback</button>
