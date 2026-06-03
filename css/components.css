@@ -2366,3 +2366,224 @@
     text-align: center;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   LOGIN PAGE ENHANCEMENTS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Animated logo gradient (#3) ─────────────────────────────── */
+.login-logo {
+  background: linear-gradient(135deg, #059669, #0891b2, #6366f1, #059669);
+  background-size: 300% 300%;
+  animation: logo-shift 6s ease infinite;
+}
+@keyframes logo-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Password show/hide wrapper (#4) ─────────────────────────── */
+.pw-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pw-wrapper .form-input {
+  padding-right: 44px;
+  width: 100%;
+}
+.pw-toggle {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+}
+.pw-toggle:hover { color: var(--color-text-secondary); }
+.pw-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Caps Lock warning (#7) ──────────────────────────────────── */
+.capslock-warn {
+  margin-top: 6px;
+  font-size: var(--font-xs);
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Remember me row (#5) ────────────────────────────────────── */
+.login-remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  min-height: 22px;
+}
+.login-remember-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.login-remember-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+.login-attempts-hint {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+.login-attempts-hint.warn {
+  color: #f87171;
+  background: rgba(248,113,113,0.1);
+}
+
+/* ── Error box with icon (#8) ────────────────────────────────── */
+.login-error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #f87171;
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+}
+
+/* ── Form shake animation on error (#8) ──────────────────────── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15%       { transform: translateX(-6px); }
+  30%       { transform: translateX(6px); }
+  45%       { transform: translateX(-5px); }
+  60%       { transform: translateX(5px); }
+  75%       { transform: translateX(-3px); }
+  90%       { transform: translateX(3px); }
+}
+#login-form.shake { animation: shake 0.5s ease; }
+
+/* ── System status bar (#14) ─────────────────────────────────── */
+.login-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-5);
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-lg);
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.status-checking {
+  background: #64748b;
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+.status-dot.status-ok   { background: #22c55e; }
+.status-dot.status-down { background: #ef4444; }
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.status-text {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Left panel live stats (#13) ─────────────────────────────── */
+.lv-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.lv-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.lv-stat-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.lv-stat-label {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* ── Mobile header (#15) ─────────────────────────────────────── */
+.login-mobile-header {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 0;
+  width: 100%;
+}
+.login-logo-sm {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #059669 0%, #0891b2 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.75rem; color: #fff;
+  flex-shrink: 0;
+}
+.login-mobile-title {
+  font-size: var(--font-sm);
+  color: rgba(255,255,255,0.6);
+  font-weight: 500;
+}
+@media (max-width: 860px) {
+  .login-mobile-header { display: flex; }
+}
+
+/* ── Improved focus rings (#12) ──────────────────────────────── */
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #059669);
+  box-shadow: 0 0 0 3px rgba(5,150,105,0.2);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary, #059669);
+  outline-offset: 2px;
+}
+
+/* ── Subtitle branding (#2) ──────────────────────────────────── */
+.login-subtitle {
+  font-size: var(--font-sm);
+  color: rgba(255,255,255,0.45);
+  text-align: center;
+  margin-bottom: var(--space-6);
+  letter-spacing: 0.01em;
+}

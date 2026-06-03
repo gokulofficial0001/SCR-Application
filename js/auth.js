@@ -78,11 +78,14 @@ const Auth = {
 
     if (!res.ok) {
       this._failedAttempts[key] = (this._failedAttempts[key] || 0) + 1;
-      if (this._failedAttempts[key] >= 5) {
+      const attempts = this._failedAttempts[key];
+      if (attempts >= 5) {
         this._lockoutUntil[key] = Date.now() + 60 * 1000;
         this._failedAttempts[key] = 0;
+        return { success: false, error: 'Account temporarily locked — too many failed attempts. Please wait 1 minute.', locked: true };
       }
-      return { success: false, error: (data && data.error) || 'Invalid username or password' };
+      const remaining = 5 - attempts;
+      return { success: false, error: `Incorrect username or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout.`, attemptsRemaining: remaining };
     }
 
     // Success — clear rate-limit state, store session + token
@@ -297,6 +300,13 @@ const Auth = {
               <span class="word" style="animation-delay:.65s">System</span>
             </h1>
             <p class="lv-sub" id="lv-sub">Structured workflows. Full traceability.<br>Clinical excellence through technology.</p>
+            <!-- Live stats (fetched in postRenderLogin from /api/admin/health) -->
+            <div class="lv-stats">
+              <div class="lv-stat"><span class="lv-stat-val" id="stat-scr">—</span><span class="lv-stat-label">SCRs Managed</span></div>
+              <div class="lv-stat"><span class="lv-stat-val" id="stat-users">—</span><span class="lv-stat-label">Team Members</span></div>
+              <div class="lv-stat"><span class="lv-stat-val" id="stat-depts">—</span><span class="lv-stat-label">Departments</span></div>
+            </div>
+
             <div class="lv-chips">
               <span class="lv-chip">6-Stage Workflow</span>
               <span class="lv-chip">Dual Approval</span>
@@ -318,27 +328,67 @@ const Auth = {
 
         <!-- ═══ RIGHT FORM PANEL ═══ -->
         <div class="login-form-side">
+
+          <!-- Mobile-only header (left visual is hidden on small screens) -->
+          <div class="login-mobile-header">
+            <div class="login-logo-sm">SCR</div>
+            <span class="login-mobile-title">GKNM Healthcare · Change Request System</span>
+          </div>
+
           <div class="login-card">
             <div class="login-logo">SCR</div>
             <h2 class="login-title">Welcome Back</h2>
-            <p class="login-subtitle">Sign in to continue</p>
+            <p class="login-subtitle">GKNM Healthcare · Change Request System</p>
 
             <form id="login-form" onsubmit="Auth.handleLogin(event)">
               <div class="form-group">
                 <label class="form-label">Username</label>
-                <input type="text" id="login-username" class="form-input" placeholder="Enter your username" required autocomplete="username">
+                <input type="text" id="login-username" class="form-input"
+                       placeholder="Enter your username" required autocomplete="username">
               </div>
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom:var(--space-2)">
                 <label class="form-label">Password</label>
-                <input type="password" id="login-password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
+                <div class="pw-wrapper">
+                  <input type="password" id="login-password" class="form-input"
+                         placeholder="Enter your password" required autocomplete="current-password">
+                  <button type="button" class="pw-toggle" id="pw-toggle-btn"
+                          aria-label="Show password" title="Show / hide password">
+                    <svg id="pw-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <svg id="pw-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                         class="hidden">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="capslock-warn hidden" id="capslock-warn">⚠ Caps Lock is on</div>
               </div>
-              <div id="login-error" class="form-error hidden" style="margin-bottom:var(--space-4);text-align:center;font-size:var(--font-base)"></div>
-              <button type="submit" class="btn btn-primary btn-lg w-full" id="login-btn" style="margin-top:var(--space-2)">
-                Sign In
-              </button>
+
+              <div class="login-remember-row">
+                <label class="login-remember-label">
+                  <input type="checkbox" id="login-remember" checked>
+                  <span>Remember me</span>
+                </label>
+                <span class="login-attempts-hint hidden" id="login-attempts-hint"></span>
+              </div>
+
+              <div id="login-error" class="login-error-box hidden"></div>
+
+              <button type="submit" class="btn btn-primary btn-lg w-full" id="login-btn"
+                      style="margin-top:var(--space-3)">Sign In</button>
             </form>
 
-            <div style="margin-top:var(--space-8);padding-top:var(--space-4);border-top:var(--glass-border);">
+            <div class="login-status-bar">
+              <span class="status-dot status-checking" id="status-dot"></span>
+              <span class="status-text" id="status-text">Checking system…</span>
+            </div>
+
+            <div style="margin-top:var(--space-6);padding-top:var(--space-4);border-top:var(--glass-border);">
               <p class="text-sm text-tertiary text-center" style="margin-bottom:var(--space-3)">Quick Demo Login</p>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-2);font-size:var(--font-xs)">
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('admin','admin123')"      title="Full system access">👑 Admin</button>
@@ -348,7 +398,7 @@ const Auth = {
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('impl','impl123')"        title="Implementation Team" style="background:rgba(20,184,166,0.1);border-color:rgba(20,184,166,0.3);color:#5eead4;">🔬 Impl. Team</button>
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('developer','dev123')"    title="Developer">💻 Developer</button>
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('requester','req123')"    title="Requester" style="grid-column:span 3">🙋 Requester (End User)</button>
-                <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('internal','int123')"   title="Internal Requester (IT-internal user with pre-fill form)" style="grid-column:span 3;background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.3);color:#d8b4fe;">🏢 Internal Requester</button>
+                <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('internal','int123')"     title="Internal Requester" style="grid-column:span 3;background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.3);color:#d8b4fe;">🏢 Internal Requester</button>
               </div>
             </div>
           </div>
@@ -360,6 +410,11 @@ const Auth = {
 
   // ── Post-render: animate the login page (called by App.renderLogin) ──
   postRenderLogin() {
+    // 0. Remember-me: if user opted out, clear session on a fresh browser open
+    if (localStorage.getItem('scr_remember') === '0' && !sessionStorage.getItem('scr_tab')) {
+      Store.clearSession();
+    }
+
     // 1. Time-based greeting
     const g = document.getElementById('lv-greeting');
     if (g) {
@@ -370,7 +425,7 @@ const Auth = {
                                'Good night 🌙';
     }
 
-    // 2. Rotating tagline — cycle through value propositions every 5s
+    // 2. Rotating tagline
     const sub = document.getElementById('lv-sub');
     if (sub) {
       const lines = [
@@ -380,15 +435,11 @@ const Auth = {
         'Purpose-built for healthcare IT.<br>Where rigour meets care.'
       ];
       let idx = 0;
-      // Clear any existing rotation from a prior render
       if (this._taglineTimer) clearInterval(this._taglineTimer);
       this._taglineTimer = setInterval(() => {
         idx = (idx + 1) % lines.length;
         sub.style.opacity = '0';
-        setTimeout(() => {
-          sub.innerHTML = lines[idx];
-          sub.style.opacity = '1';
-        }, 300);
+        setTimeout(() => { sub.innerHTML = lines[idx]; sub.style.opacity = '1'; }, 300);
       }, 5000);
     }
 
@@ -405,8 +456,6 @@ const Auth = {
         { icon: '🎯', title: 'Triage Module – ER',        sub: 'Color-coded priority + queue analytics', tag: 'DELIVERED' },
         { icon: '📱', title: 'Mobile Access',             sub: 'All requests trackable from any device', tag: 'LIVE' }
       ];
-
-      // Render all items, only first is active; rest fade-crossfade in
       carousel.innerHTML = updates.map((u, i) => `
         <div class="lv-update-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
           <span class="lv-update-icon">${u.icon}</span>
@@ -417,21 +466,16 @@ const Auth = {
           <span class="lv-update-tag ${u.tag.toLowerCase()}">${u.tag}</span>
         </div>
       `).join('');
-
-      // Rotate every 4.5s with crossfade — pauses on hover
       if (this._updatesTimer) clearInterval(this._updatesTimer);
-      let idx = 0;
-      let paused = false;
+      let cidx = 0, paused = false;
       this._updatesTimer = setInterval(() => {
         if (paused) return;
         const items = carousel.querySelectorAll('.lv-update-item');
         if (!items.length) return;
-        items[idx].classList.remove('active');
-        idx = (idx + 1) % items.length;
-        items[idx].classList.add('active');
+        items[cidx].classList.remove('active');
+        cidx = (cidx + 1) % items.length;
+        items[cidx].classList.add('active');
       }, 4500);
-
-      // Pause on hover so users can read — resume on leave
       const wrapper = carousel.closest('.lv-updates');
       if (wrapper) {
         wrapper.addEventListener('mouseenter', () => { paused = true; });
@@ -443,24 +487,66 @@ const Auth = {
     const visual = document.getElementById('login-visual');
     if (visual) {
       const orbs = visual.querySelectorAll('[data-parallax]');
-      // Unbind any previous handler so we don't stack on re-render
-      if (this._parallaxHandler) {
-        window.removeEventListener('mousemove', this._parallaxHandler);
-      }
+      if (this._parallaxHandler) window.removeEventListener('mousemove', this._parallaxHandler);
       this._parallaxHandler = (e) => {
         const rect = visual.getBoundingClientRect();
-        // Normalize cursor to -0.5..0.5 relative to the visual panel
         const nx = (e.clientX - rect.left) / rect.width  - 0.5;
         const ny = (e.clientY - rect.top)  / rect.height - 0.5;
         orbs.forEach(orb => {
           const depth = parseFloat(orb.dataset.parallax) || 0;
-          const x = nx * depth * 60;
-          const y = ny * depth * 60;
-          orb.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+          orb.style.transform = `translate3d(${nx * depth * 60}px, ${ny * depth * 60}px, 0)`;
         });
       };
       window.addEventListener('mousemove', this._parallaxHandler, { passive: true });
     }
+
+    // 5. Auto-focus username field
+    setTimeout(() => document.getElementById('login-username')?.focus(), 80);
+
+    // 6. Caps Lock detection on password field
+    const pwInput  = document.getElementById('login-password');
+    const capsWarn = document.getElementById('capslock-warn');
+    if (pwInput && capsWarn) {
+      const checkCaps = e => {
+        if (e.getModifierState)
+          capsWarn.classList.toggle('hidden', !e.getModifierState('CapsLock'));
+      };
+      pwInput.addEventListener('keydown', checkCaps);
+      pwInput.addEventListener('keyup',   checkCaps);
+    }
+
+    // 7. Show / hide password toggle
+    const toggleBtn = document.getElementById('pw-toggle-btn');
+    if (toggleBtn && pwInput) {
+      toggleBtn.addEventListener('click', () => {
+        const show = pwInput.type === 'password';
+        pwInput.type = show ? 'text' : 'password';
+        document.getElementById('pw-eye-open').classList.toggle('hidden',  show);
+        document.getElementById('pw-eye-closed').classList.toggle('hidden', !show);
+        toggleBtn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
+    }
+
+    // 8. Live stats + 9. System status from health endpoint (no auth needed)
+    fetch('/api/admin/health')
+      .then(r => r.json())
+      .then(d => {
+        const c = d.counts || {};
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('stat-scr',   c.scr_requests  || '0');
+        set('stat-users', c.users         || '0');
+        set('stat-depts', c.departments   || '0');
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        if (dot) dot.className = 'status-dot status-ok';
+        if (txt) txt.textContent = 'All systems operational';
+      })
+      .catch(() => {
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        if (dot) dot.className = 'status-dot status-down';
+        if (txt) txt.textContent = 'Server unreachable — check that it is running';
+      });
   },
 
   // ── Handle login form ──────────────────────────────────
@@ -468,19 +554,43 @@ const Auth = {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    const btn = document.getElementById('login-btn');
+    const btn      = document.getElementById('login-btn');
+    const errEl    = document.getElementById('login-error');
+    const hintEl   = document.getElementById('login-attempts-hint');
     if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+    if (errEl) errEl.classList.add('hidden');
 
     const result = await Auth.login(username, password);
+
     if (result.success) {
+      // Remember me: if unchecked, mark session as tab-only so it clears on browser close
+      const rememberMe = document.getElementById('login-remember')?.checked !== false;
+      sessionStorage.setItem('scr_tab', '1');
+      if (!rememberMe) localStorage.setItem('scr_remember', '0');
+      else             localStorage.removeItem('scr_remember');
       Utils.toast('success', 'Welcome!', `Signed in as ${result.user.name}`);
       App.init();
     } else {
-      const errEl = document.getElementById('login-error');
+      // Show error message
       if (errEl) {
-        errEl.textContent = result.error;
+        errEl.innerHTML = `<span style="margin-right:6px">⚠</span>${Utils.escapeHtml ? Utils.escapeHtml(result.error) : result.error}`;
         errEl.classList.remove('hidden');
       }
+      // Show / update attempts-remaining hint
+      if (hintEl) {
+        if (result.attemptsRemaining !== undefined) {
+          hintEl.textContent = `${result.attemptsRemaining} attempt${result.attemptsRemaining !== 1 ? 's' : ''} left`;
+          hintEl.className = `login-attempts-hint${result.attemptsRemaining <= 2 ? ' warn' : ''}`;
+        } else if (result.locked) {
+          hintEl.textContent = 'Locked — wait 1 min';
+          hintEl.className = 'login-attempts-hint warn';
+        } else {
+          hintEl.className = 'login-attempts-hint hidden';
+        }
+      }
+      // Shake animation on the form
+      const form = document.getElementById('login-form');
+      if (form) { form.classList.remove('shake'); void form.offsetWidth; form.classList.add('shake'); }
       document.getElementById('login-password').value = '';
       if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
     }

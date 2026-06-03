@@ -120,7 +120,9 @@ app.use('/api', apiLimiter);
 app.use('/api', requireAuth);
 
 // ── Admin-only routes (GET snapshot + all mutating endpoints) ──
-app.get('/api/admin/snapshot',                                                  requireAdmin);
+// Snapshot is used by all roles for client hydration — passwords are stripped
+// inside the handler (routes.js). requireAdmin is intentionally NOT used here.
+// app.get('/api/admin/snapshot', requireAdmin) ← removed: blocked non-admin hydration
 app.post('/api/admin/reset',  requireAdmin);
 // Import may carry large payloads (full DB snapshot); allow up to 20 MB on
 // this single route only so the global 100 kb cap is not weakened globally.

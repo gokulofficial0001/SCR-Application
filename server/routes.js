@@ -136,7 +136,11 @@ adminRoutes.get('/snapshot', (req, res) => {
   const out = {};
   for (const coll of COLLECTIONS) {
     const rows = db.prepare(`SELECT data FROM ${coll}`).all();
-    out[coll] = rows.map(r => JSON.parse(r.data));
+    out[coll] = rows.map(r => {
+      const parsed = JSON.parse(r.data);
+      if (coll === 'users') { delete parsed.password; }
+      return parsed;
+    });
   }
   const metaRows = db.prepare(`SELECT key, data FROM meta`).all();
   out._meta = {};
