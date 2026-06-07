@@ -81,6 +81,7 @@ const MasterData = {
               <tr>
                 <th>Name</th>
                 <th>Username</th>
+                <th>Password</th>
                 <th>Role</th>
                 <th>Email</th>
                 <th>Department</th>
@@ -97,6 +98,18 @@ const MasterData = {
                     </div>
                   </td>
                   <td class="text-sm" style="font-family:monospace">${Utils.escapeHtml(u.username)}</td>
+                  <td class="text-sm" style="font-family:monospace;white-space:nowrap">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span class="pw-mask" style="letter-spacing:2px;color:var(--color-text-muted)">••••••••</span>
+                      <span class="pw-plain hidden" style="color:var(--color-text-primary)">${Utils.escapeHtml(u.password || '—')}</span>
+                      <button type="button" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--color-text-muted);line-height:1" title="Show / hide password"
+                        onclick="MasterData.togglePw(this)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
                   <td>${Utils.badgeHtml(Utils.getRoleLabel(u.role), 'info')}</td>
                   <td class="text-sm text-tertiary">${Utils.escapeHtml(u.email)}</td>
                   <td class="text-sm">${Utils.escapeHtml(u.department)}</td>
@@ -298,9 +311,25 @@ const MasterData = {
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Password <span class="required">*</span></label>
-              <input type="text" class="form-input" id="user-password" value="${Utils.escapeHtml(user.password || '')}" placeholder="At least 4 characters" maxlength="60" autocomplete="new-password">
-              <span class="form-hint">Min 4 characters</span>
+              <label class="form-label">Password${isEdit ? '' : ' <span class="required">*</span>'}</label>
+              <div class="pw-wrapper">
+                <input type="password" class="form-input" id="user-password"
+                       value="${Utils.escapeHtml(user.password || '')}"
+                       placeholder="${isEdit ? 'Leave blank to keep current password' : 'At least 4 characters'}"
+                       maxlength="60" autocomplete="new-password">
+                <button type="button" class="pw-toggle" id="modal-pw-toggle"
+                        aria-label="Show password" title="Show / hide password"
+                        onclick="MasterData._toggleModalPw()">
+                  <svg id="modal-eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <svg id="modal-eye-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </button>
+              </div>
+              <span class="form-hint">${isEdit ? 'Current password shown. Change it or leave as-is.' : 'Min 4 characters'}</span>
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
@@ -344,15 +373,17 @@ const MasterData = {
   },
 
   saveUser(editId) {
+    const newPassword = document.getElementById('user-password').value;
     const data = {
       name:       document.getElementById('user-name').value.trim(),
-      // Usernames are lowercased for case-insensitive matching
       username:   document.getElementById('user-username').value.trim().toLowerCase(),
-      password:   document.getElementById('user-password').value,
       email:      document.getElementById('user-email').value.trim(),
       role:       document.getElementById('user-role').value,
       department: document.getElementById('user-dept').value
     };
+    // Only include password if the field was filled in.
+    // When editing, a blank field means "keep the existing password unchanged".
+    if (newPassword) data.password = newPassword;
 
     const err = this._validateUser(data, editId || null);
     if (err) { this._showError(err.field, err.message); return; }
@@ -371,6 +402,26 @@ const MasterData = {
     this._disposeGuard('user-modal');
     document.getElementById('user-modal')?.remove();
     Router.navigate('master-data');
+  },
+
+  _toggleModalPw() {
+    const input = document.getElementById('user-password');
+    const open  = document.getElementById('modal-eye-open');
+    const closed = document.getElementById('modal-eye-closed');
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    open.classList.toggle('hidden',  show);
+    closed.classList.toggle('hidden', !show);
+  },
+
+  togglePw(btn) {
+    const wrap = btn.closest('div');
+    const mask  = wrap.querySelector('.pw-mask');
+    const plain = wrap.querySelector('.pw-plain');
+    const showing = !plain.classList.contains('hidden');
+    mask.classList.toggle('hidden',  !showing);
+    plain.classList.toggle('hidden',  showing);
   },
 
   async deleteUser(id) {
@@ -619,9 +670,10 @@ const MasterData = {
       return { field: 'user-username', message: 'Username can only contain lowercase letters, numbers, and underscores' };
     }
 
-    if (!data.password) return { field: 'user-password', message: 'Password is required' };
-    if (data.password.length < 4) return { field: 'user-password', message: 'Password must be at least 4 characters' };
-    if (data.password.length > 60) return { field: 'user-password', message: 'Password cannot exceed 60 characters' };
+    // New users must set a password; editing without touching the field keeps the existing one
+    if (!editId && !data.password) return { field: 'user-password', message: 'Password is required for new users' };
+    if (data.password && data.password.length < 4) return { field: 'user-password', message: 'Password must be at least 4 characters' };
+    if (data.password && data.password.length > 60) return { field: 'user-password', message: 'Password cannot exceed 60 characters' };
 
     if (data.email && !Utils.isValidEmail(data.email)) {
       return { field: 'user-email', message: 'Email is not a valid email address' };

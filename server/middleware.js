@@ -43,12 +43,11 @@ function requireAdmin(req, res, next) {
 }
 
 // ── loginLimiter ───────────────────────────────────────────
-// Brute-force defence on the login endpoint. Per-IP cap; bypasses the
-// in-memory client-side lockout which doesn't survive a page reload.
-// Hospital intranet policy: 5 attempts per 15-minute window (VULN-011).
+// Gentle rate limit on the login endpoint. Per-IP cap.
+// Allows up to 50 attempts per 15-minute window per IP.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,   // 15 minutes
-  max: 5,                     // 5 attempts per IP per window
+  max: 50,                    // 50 attempts per IP per window
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts. Please wait 15 minutes before trying again.' }

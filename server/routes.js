@@ -22,10 +22,11 @@ router.param('coll', (req, res, next, coll) => {
 
 router.get('/:coll', (req, res) => {
   const coll = req.params.coll;
+  const isAdmin = req.user?.role === 'admin';
   const rows = db.prepare(`SELECT data FROM ${coll}`).all();
   res.json(rows.map(r => {
     const parsed = JSON.parse(r.data);
-    if (coll === 'users') { delete parsed.password; }
+    if (coll === 'users' && !isAdmin) { delete parsed.password; }
     return parsed;
   }));
 });
@@ -51,10 +52,11 @@ router.put('/:coll', (req, res) => {
 
 router.get('/:coll/:id', (req, res) => {
   const coll = req.params.coll;
+  const isAdmin = req.user?.role === 'admin';
   const row = db.prepare(`SELECT data FROM ${coll} WHERE id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   const parsed = JSON.parse(row.data);
-  if (coll === 'users') { delete parsed.password; }
+  if (coll === 'users' && !isAdmin) { delete parsed.password; }
   res.json(parsed);
 });
 
@@ -133,12 +135,13 @@ metaRoutes.delete('/:key', (req, res) => {
 const adminRoutes = express.Router();
 
 adminRoutes.get('/snapshot', (req, res) => {
+  const isAdmin = req.user?.role === 'admin';
   const out = {};
   for (const coll of COLLECTIONS) {
     const rows = db.prepare(`SELECT data FROM ${coll}`).all();
     out[coll] = rows.map(r => {
       const parsed = JSON.parse(r.data);
-      if (coll === 'users') { delete parsed.password; }
+      if (coll === 'users' && !isAdmin) { delete parsed.password; }
       return parsed;
     });
   }

@@ -1990,14 +1990,18 @@ const SCRManager = {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    page-break-inside: avoid;   /* don't split any section across pages */
-    /* -1px overlaps the bottom border of this table with the top border
-       of the next, so adjacent sections share a single border line and
-       read as one continuous paper form. */
+    page-break-inside: avoid;
+    /* -1px overlaps this table's bottom border with the next table's top
+       border so adjacent sections share one line — reads as a continuous form. */
     margin-bottom: -1px;
+    /* NO table-level border here. A border on the <table> element protrudes
+       1px beyond the declared 100% width (border-collapse half-outside rule),
+       causing a hidden horizontal overflow that breaks print pagination.
+       Instead, outer edges are applied directly to the outermost td cells. */
   }
-  /* The title banner sits flush against the first table */
   .title-banner + table.f { margin-top: 0; }
+
+  /* ── Internal cell borders (all cells) ── */
   table.f td {
     border: 1px solid #444;
     padding: 5px 10px;
@@ -2006,10 +2010,33 @@ const SCRManager = {
     overflow: hidden;
   }
 
-  /* Force a hard page break — used to push Study Details onto page 2 */
-  .page-break-before {
-    page-break-before: always;
-    break-before: page;
+  /* ── Outer edge borders — 2px solid #000 ──────────────────────────────
+     Applied directly to the outermost cells so the border sits INSIDE the
+     cell box and never protrudes beyond the page content area.
+     This makes all four outer edges consistently 2px while internal
+     cell-to-cell borders stay 1px. Right edge is the critical fix: it was
+     the border being clipped/invisible at the right page margin before. */
+  table.f td:first-child            { border-left:   2px solid #000; }
+  table.f td:last-child             { border-right:  2px solid #000; }
+  table.f tr:first-child td         { border-top:    2px solid #000; }
+  /* Bottom outer edge: only the absolute last row of the LAST table on the
+     page. Using margin-bottom:-1px to join tables means each table's last
+     row bottom border is covered by the next table's top border — so we
+     only declare the 2px bottom on the genuine last table in each page. */
+  .page-one > table.f:last-child tr:last-child td,
+  .page-two > table.f:last-child tr:last-child td { border-bottom: 2px solid #000; }
+
+  /* Page 1 wrapper — everything from title through End User.
+     page-break-after forces Study Details to always open on a fresh page. */
+  .page-one {
+    page-break-after: always;
+    break-after: page;
+  }
+  /* Allow tables inside page-one to split across the physical page boundary
+     so no table jumps entirely to page 2 (which would push End User there). */
+  .page-one table.f {
+    page-break-inside: auto;
+    break-inside: auto;
   }
 
   /* Section header row (green band running full width) */
@@ -2050,10 +2077,12 @@ const SCRManager = {
   td.area-lg > .clip { height: 155px; }
   td.area-sm > .clip { height: 62px;  }
 
-  /* Single-line rows — sized to fill Page 1 fully while keeping End User on it */
-  .row-h-28 td { height: 42px; }
-  .row-h-42 td { height: 58px; }
-  .row-h-48 td { height: 58px; }
+  /* Single-line rows — reduced from (42/58/58)px to (36/48/48)px.
+     Saves ~74px on page 1, giving 130px of headroom within A4 portrait
+     (273mm content height ≈ 1031px @ 96dpi; page-1 content ≈ 896px). */
+  .row-h-28 td { height: 36px; }
+  .row-h-42 td { height: 48px; }
+  .row-h-48 td { height: 48px; }
 
   /* Signature cell for the approver names */
   td.sig { padding: 0; vertical-align: bottom; text-align: center; height: 62px; }
@@ -2087,6 +2116,9 @@ const SCRManager = {
 </head><body>
 
 <div class="page-wrap">
+
+<!-- ═══ PAGE 1: Title → End User ═══ -->
+<div class="page-one">
 
 <!-- TITLE -->
 <div class="title-banner">
@@ -2175,23 +2207,28 @@ const SCRManager = {
     <td class="lbl-c" colspan="2">Received By</td>
     <td class="lbl-c" colspan="2">Coordinated By</td>
   </tr>
-  <tr class="row-h-42">
-    <td class="val-c" colspan="2">${esc(scr.requestedBy)}</td>
-    <td class="val-c" colspan="2">${esc(scr.receivedBy)}</td>
-    <td class="val-c" colspan="2">${esc(scr.coordinatedBy)}</td>
+  <tr>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.requestedBy)}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.receivedBy)}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.coordinatedBy)}</div></td>
   </tr>
   <tr class="row-h-28">
     <td class="lbl-c" colspan="3">Department Name</td>
     <td class="lbl-c" colspan="3">Department HOD</td>
   </tr>
-  <tr class="row-h-42">
-    <td class="val-c" colspan="3">${esc(scr.department)}</td>
-    <td class="val-c" colspan="3">${esc(scr.hodName)}</td>
+  <tr>
+    <td class="sig" colspan="3"><div class="sig-inner">${esc(scr.department)}</div></td>
+    <td class="sig" colspan="3"><div class="sig-inner">${esc(scr.hodName)}</div></td>
   </tr>
 </table>
 
-<!-- STUDY DETAILS — always begins on page 2 -->
-<table class="f page-break-before">
+</div><!-- /.page-one -->
+
+<!-- ═══ PAGE 2: Study Details → Note ═══ -->
+<div class="page-two">
+
+<!-- STUDY DETAILS -->
+<table class="f">
   <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
   <tr><td class="sec" colspan="4">STUDY DETAILS</td></tr>
   <tr class="row-h-28">
@@ -2200,11 +2237,11 @@ const SCRManager = {
     <td class="lbl-c">Study Date From</td>
     <td class="lbl-c">Study Date To</td>
   </tr>
-  <tr class="row-h-48">
-    <td class="val-c">${esc(naIfEmpty(scr.studyDoneByPrimary))}</td>
-    <td class="val-c">${esc(naIfEmpty(scr.studyDoneBySecondary))}</td>
-    <td class="val-c">${fmt(scr.studyDateFrom)}</td>
-    <td class="val-c">${fmt(scr.studyDateTo)}</td>
+  <tr>
+    <td class="sig"><div class="sig-inner">${esc(naIfEmpty(scr.studyDoneByPrimary))}</div></td>
+    <td class="sig"><div class="sig-inner">${esc(naIfEmpty(scr.studyDoneBySecondary))}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.studyDateFrom)}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.studyDateTo)}</div></td>
   </tr>
   <tr class="row-h-28">
     <td class="lbl-c">Assigned Developer 1</td>
@@ -2212,18 +2249,18 @@ const SCRManager = {
     <td class="lbl-c">Assigned On</td>
     <td class="lbl-c">Schedule On</td>
   </tr>
-  <tr class="row-h-48">
-    <td class="val-c">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</td>
-    <td class="val-c">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</td>
-    <td class="val-c">${fmt(scr.assignedOn)}</td>
-    <td class="val-c">${fmt(scr.scheduleDate)}</td>
+  <tr>
+    <td class="sig"><div class="sig-inner">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</div></td>
+    <td class="sig"><div class="sig-inner">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.assignedOn)}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.scheduleDate)}</div></td>
   </tr>
   <tr class="row-h-28">
     <td class="lbl-c">Completed On</td>
     <td colspan="3" style="background:#fff"></td>
   </tr>
-  <tr class="row-h-42">
-    <td class="val-c">${fmt(scr.completedOn)}</td>
+  <tr>
+    <td class="sig"><div class="sig-inner">${fmt(scr.completedOn)}</div></td>
     <td colspan="3" style="background:#fff"></td>
   </tr>
 </table>
@@ -2294,6 +2331,8 @@ const SCRManager = {
     <td>Behind every system change is a push for better healthcare delivery.</td>
   </tr>
 </table>
+
+</div><!-- /.page-two -->
 
 </div><!-- /.page-wrap -->
 </body></html>`;

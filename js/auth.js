@@ -43,25 +43,10 @@ const Auth = {
     }
   },
 
-  // ── Rate-limit bookkeeping (in-memory, resets on reload) ──
-  _failedAttempts: {},
-  _lockoutUntil: {},
-
   // ── Login (server-backed) ───────────────────────────────
-  // Calls POST /api/auth/login. On success the server returns an opaque
-  // bearer token that Store attaches to every subsequent /api request.
-  // Client-side 5-attempt lockout kept as a UX nicety; the AUTHORITATIVE
-  // brute-force defence is the server's express-rate-limit on the route.
   async login(username, password) {
     if (!username || !password) {
       return { success: false, error: 'Username and password required' };
-    }
-    const key = username.toLowerCase().trim();
-
-    const until = this._lockoutUntil[key] || 0;
-    if (until > Date.now()) {
-      const wait = Math.ceil((until - Date.now()) / 1000);
-      return { success: false, error: `Too many attempts. Try again in ${wait}s.` };
     }
 
     let res, data;
@@ -77,20 +62,8 @@ const Auth = {
     }
 
     if (!res.ok) {
-      this._failedAttempts[key] = (this._failedAttempts[key] || 0) + 1;
-      const attempts = this._failedAttempts[key];
-      if (attempts >= 5) {
-        this._lockoutUntil[key] = Date.now() + 60 * 1000;
-        this._failedAttempts[key] = 0;
-        return { success: false, error: 'Account temporarily locked — too many failed attempts. Please wait 1 minute.', locked: true };
-      }
-      const remaining = 5 - attempts;
-      return { success: false, error: `Incorrect username or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout.`, attemptsRemaining: remaining };
+      return { success: false, error: 'Incorrect username or password' };
     }
-
-    // Success — clear rate-limit state, store session + token
-    delete this._failedAttempts[key];
-    delete this._lockoutUntil[key];
 
     // Normalise role to lowercase so permission lookups are case-insensitive
     if (data.user) {
@@ -374,7 +347,6 @@ const Auth = {
                   <input type="checkbox" id="login-remember" checked>
                   <span>Remember me</span>
                 </label>
-                <span class="login-attempts-hint hidden" id="login-attempts-hint"></span>
               </div>
 
               <div id="login-error" class="login-error-box hidden"></div>
@@ -388,6 +360,7 @@ const Auth = {
               <span class="status-text" id="status-text">Checking system…</span>
             </div>
 
+            ${(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? `
             <div style="margin-top:var(--space-6);padding-top:var(--space-4);border-top:var(--glass-border);">
               <p class="text-sm text-tertiary text-center" style="margin-bottom:var(--space-3)">Quick Demo Login</p>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-2);font-size:var(--font-xs)">
@@ -401,6 +374,7 @@ const Auth = {
                 <button class="btn btn-ghost btn-sm" onclick="Auth.quickLogin('internal','int123')"     title="Internal Requester" style="grid-column:span 3;background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.3);color:#d8b4fe;">🏢 Internal Requester</button>
               </div>
             </div>
+            ` : ''}
           </div>
         </div>
 
@@ -556,7 +530,6 @@ const Auth = {
     const password = document.getElementById('login-password').value;
     const btn      = document.getElementById('login-btn');
     const errEl    = document.getElementById('login-error');
-    const hintEl   = document.getElementById('login-attempts-hint');
     if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
     if (errEl) errEl.classList.add('hidden');
 
@@ -575,18 +548,6 @@ const Auth = {
       if (errEl) {
         errEl.innerHTML = `<span style="margin-right:6px">⚠</span>${Utils.escapeHtml ? Utils.escapeHtml(result.error) : result.error}`;
         errEl.classList.remove('hidden');
-      }
-      // Show / update attempts-remaining hint
-      if (hintEl) {
-        if (result.attemptsRemaining !== undefined) {
-          hintEl.textContent = `${result.attemptsRemaining} attempt${result.attemptsRemaining !== 1 ? 's' : ''} left`;
-          hintEl.className = `login-attempts-hint${result.attemptsRemaining <= 2 ? ' warn' : ''}`;
-        } else if (result.locked) {
-          hintEl.textContent = 'Locked — wait 1 min';
-          hintEl.className = 'login-attempts-hint warn';
-        } else {
-          hintEl.className = 'login-attempts-hint hidden';
-        }
       }
       // Shake animation on the form
       const form = document.getElementById('login-form');

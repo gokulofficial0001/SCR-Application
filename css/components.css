@@ -2,6 +2,10 @@
    SCR MANAGEMENT SYSTEM — Reusable UI Components
    ============================================================ */
 
+/* NOTE: OS "reduce motion" handling lives in performance.css §32.
+   Animations are intentionally shown on ALL machines regardless of
+   the OS accessibility setting — see that file for the rationale. */
+
 /* ── Layout: App Shell ─────────────────────────────────────── */
 .app-layout {
   display: flex;

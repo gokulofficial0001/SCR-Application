@@ -184,7 +184,13 @@ body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 14px; c
 table.f { width: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; margin-bottom: -1px; }
 .title-banner + table.f { margin-top: 0; }
 table.f td { border: 1px solid #444; padding: 5px 10px; vertical-align: middle; word-wrap: break-word; overflow: hidden; }
-.page-break-before { page-break-before: always; break-before: page; }
+table.f td:first-child { border-left: 2px solid #000; }
+table.f td:last-child { border-right: 2px solid #000; }
+table.f tr:first-child td { border-top: 2px solid #000; }
+.page-one > table.f:last-child tr:last-child td,
+.page-two > table.f:last-child tr:last-child td { border-bottom: 2px solid #000; }
+.page-one { page-break-after: always; break-after: page; }
+.page-one table.f { page-break-inside: auto; break-inside: auto; }
 td.sec { background: #a2c878; font-weight: 700; font-size: 12.5px; color: #000; padding: 5px 12px; text-transform: uppercase; letter-spacing: 0.3px; height: 22px; }
 td.lbl   { font-weight: 700; background: #f4f4f4; font-size: 12px; }
 td.lbl-c { font-weight: 700; background: #f4f4f4; font-size: 12px; text-align: center; }
@@ -196,9 +202,9 @@ td.area-sm { padding: 0; vertical-align: top; height: 62px;  }
 td.area    > .clip { height: 155px; }
 td.area-lg > .clip { height: 155px; }
 td.area-sm > .clip { height: 62px;  }
-.row-h-28 td { height: 42px; }
-.row-h-42 td { height: 58px; }
-.row-h-48 td { height: 58px; }
+.row-h-28 td { height: 36px; }
+.row-h-42 td { height: 48px; }
+.row-h-48 td { height: 48px; }
 td.sig { padding: 0; vertical-align: bottom; text-align: center; height: 62px; }
 td.sig > .sig-inner { height: 62px; padding: 0 6px 8px; box-sizing: border-box; display: flex; align-items: flex-end; justify-content: center; word-wrap: break-word; font-size: 13px; font-weight: 600; }
 td.ap-approved { background: #7fc356; color: #000; text-align: center; font-weight: 700; }
@@ -211,6 +217,8 @@ td.ap-mark { text-align: center; font-weight: 700; font-size: 16px; }
 @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 <div class="page-wrap">
+
+<div class="page-one">
 
 <div class="title-banner"><h1>SOFTWARE CHANGE REQUEST (SCR) FORM</h1></div>
 
@@ -250,20 +258,44 @@ td.ap-mark { text-align: center; font-weight: 700; font-size: 16px; }
   <colgroup><col style="width:16.67%"><col style="width:16.66%"><col style="width:16.67%"><col style="width:16.66%"><col style="width:16.67%"><col style="width:16.67%"></colgroup>
   <tr><td class="sec" colspan="6">END USER</td></tr>
   <tr class="row-h-28"><td class="lbl-c" colspan="2">Requested By</td><td class="lbl-c" colspan="2">Received By</td><td class="lbl-c" colspan="2">Coordinated By</td></tr>
-  <tr class="row-h-42"><td class="val-c" colspan="2">${esc(scr.requestedBy)}</td><td class="val-c" colspan="2">${esc(scr.receivedBy)}</td><td class="val-c" colspan="2">${esc(scr.coordinatedBy)}</td></tr>
+  <tr>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.requestedBy)}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.receivedBy)}</div></td>
+    <td class="sig" colspan="2"><div class="sig-inner">${esc(scr.coordinatedBy)}</div></td>
+  </tr>
   <tr class="row-h-28"><td class="lbl-c" colspan="3">Department Name</td><td class="lbl-c" colspan="3">Department HOD</td></tr>
-  <tr class="row-h-42"><td class="val-c" colspan="3">${esc(scr.department)}</td><td class="val-c" colspan="3">${esc(scr.hodName)}</td></tr>
+  <tr>
+    <td class="sig" colspan="3"><div class="sig-inner">${esc(scr.department)}</div></td>
+    <td class="sig" colspan="3"><div class="sig-inner">${esc(scr.hodName)}</div></td>
+  </tr>
 </table>
 
-<table class="f page-break-before">
+</div><!-- /.page-one -->
+
+<div class="page-two">
+
+<table class="f">
   <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
   <tr><td class="sec" colspan="4">STUDY DETAILS</td></tr>
   <tr class="row-h-28"><td class="lbl-c">Study Done by</td><td class="lbl-c">Study Done by</td><td class="lbl-c">Study Date From</td><td class="lbl-c">Study Date To</td></tr>
-  <tr class="row-h-48"><td class="val-c">${esc(naIfEmpty(scr.studyDoneByPrimary))}</td><td class="val-c">${esc(naIfEmpty(scr.studyDoneBySecondary))}</td><td class="val-c">${fmt(scr.studyDateFrom)}</td><td class="val-c">${fmt(scr.studyDateTo)}</td></tr>
+  <tr>
+    <td class="sig"><div class="sig-inner">${esc(naIfEmpty(scr.studyDoneByPrimary))}</div></td>
+    <td class="sig"><div class="sig-inner">${esc(naIfEmpty(scr.studyDoneBySecondary))}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.studyDateFrom)}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.studyDateTo)}</div></td>
+  </tr>
   <tr class="row-h-28"><td class="lbl-c">Assigned Developer 1</td><td class="lbl-c">Assigned Developer 2</td><td class="lbl-c">Assigned On</td><td class="lbl-c">Schedule On</td></tr>
-  <tr class="row-h-48"><td class="val-c">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</td><td class="val-c">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</td><td class="val-c">${fmt(scr.assignedOn)}</td><td class="val-c">${fmt(scr.scheduleDate)}</td></tr>
+  <tr>
+    <td class="sig"><div class="sig-inner">${esc(dev1 ? dev1.name : naIfEmpty(scr.assignedDeveloper))}</div></td>
+    <td class="sig"><div class="sig-inner">${esc(dev2 ? dev2.name : naIfEmpty(scr.assignedDeveloper2))}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.assignedOn)}</div></td>
+    <td class="sig"><div class="sig-inner">${fmt(scr.scheduleDate)}</div></td>
+  </tr>
   <tr class="row-h-28"><td class="lbl-c">Completed On</td><td colspan="3" style="background:#fff"></td></tr>
-  <tr class="row-h-42"><td class="val-c">${fmt(scr.completedOn)}</td><td colspan="3" style="background:#fff"></td></tr>
+  <tr>
+    <td class="sig"><div class="sig-inner">${fmt(scr.completedOn)}</div></td>
+    <td colspan="3" style="background:#fff"></td>
+  </tr>
 </table>
 
 <table class="f">
@@ -296,6 +328,8 @@ td.ap-mark { text-align: center; font-weight: 700; font-size: 16px; }
   <tr><td><strong>Reasons for this Change:</strong> Request describe the reasons and the purposes of this request (what is the process or technical driver). Explain the impact of the change request on the Business Case.</td></tr>
   <tr class="quote-row"><td>Behind every system change is a push for better healthcare delivery.</td></tr>
 </table>
+
+</div><!-- /.page-two -->
 
 </div></body></html>`;
 }

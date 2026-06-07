@@ -657,28 +657,22 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════
-   32. REDUCED MOTION — respect OS preference
+   32. REDUCED MOTION — INTENTIONALLY NOT SUPPRESSED
+   ──────────────────────────────────────────────────────────
+   This app's animations (login healthcare visuals, page
+   transitions, hover feedback) are part of the product UX and
+   must look identical on every machine.
+
+   We DELIBERATELY do NOT disable animations when the OS reports
+   `prefers-reduced-motion: reduce` (Windows "Animation effects"
+   OFF / macOS "Reduce motion" ON). Previously a universal
+   suppression block lived here and caused the animations to
+   silently vanish on any PC that had that accessibility toggle
+   turned off — making the effect appear "machine dependent".
+
+   If you ever need to honour OS motion preferences again, add a
+   targeted `@media (prefers-reduced-motion: reduce)` block here.
    ══════════════════════════════════════════════════════════ */
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  .lv-wave-line,
-  .lv-conn,
-  .lv-node,
-  .lv-ring,
-  .lv-ecg-line,
-  .lv-mesh {
-    animation: none !important;
-  }
-}
 
 /* ══════════════════════════════════════════════════════════
    33. ULTRA-HIGH REFRESH DEVICES — buttery on 120Hz+ ProMotion
