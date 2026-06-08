@@ -8,6 +8,14 @@ const { requireAuth, requireAdmin, loginLimiter, apiLimiter } = require('./middl
 const { DB_PATH } = require('./db');
 
 const PORT = parseInt(process.env.PORT || '3500', 10);
+// HOST controls which network interface the server binds to.
+//   DEV  → 127.0.0.1   (only reachable as http://localhost:3500)
+//   LIVE → 10.10.1.26  (only reachable as http://10.10.1.26:3500)
+// Binding to a SPECIFIC interface (not 0.0.0.0) lets the dev and live
+// servers run on the SAME port 3500 at the same time without conflict.
+// Default stays 0.0.0.0 (all interfaces) for any single-environment use.
+const HOST = process.env.HOST || '0.0.0.0';
+const ENV_NAME = process.env.SCR_ENV || (HOST === '127.0.0.1' ? 'DEVELOPMENT' : HOST === '0.0.0.0' ? 'ALL-INTERFACES' : 'LIVE');
 const STATIC_ROOT = path.resolve(__dirname, '..');
 
 const app = express();
@@ -157,15 +165,22 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, HOST, () => {
   const line = '═'.repeat(54);
   console.log('');
   console.log(`╔${line}╗`);
-  console.log('║   SCR Management System — Backend Started           ║');
+  console.log(`║   SCR Management System — Backend Started [${ENV_NAME.padEnd(8)}] ║`);
   console.log(`╚${line}╝`);
   console.log('');
-  console.log(`   Local:    http://localhost:${PORT}/`);
-  for (const a of lanAddrs) console.log(`   LAN:      http://${a}:${PORT}/`);
+  console.log(`   Bind:     ${HOST}:${PORT}  (${ENV_NAME})`);
+  if (HOST === '127.0.0.1') {
+    console.log(`   URL:      http://localhost:${PORT}/   (development only)`);
+  } else if (HOST === '0.0.0.0') {
+    console.log(`   Local:    http://localhost:${PORT}/`);
+    for (const a of lanAddrs) console.log(`   LAN:      http://${a}:${PORT}/`);
+  } else {
+    console.log(`   URL:      http://${HOST}:${PORT}/   (live)`);
+  }
   console.log('');
   console.log(`   API:      http://localhost:${PORT}/api/`);
   console.log(`   Health:   http://localhost:${PORT}/api/admin/health   (public)`);

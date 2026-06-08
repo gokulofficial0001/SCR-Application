@@ -1054,6 +1054,10 @@ const SCRManager = {
     const depts = Store.getAll('departments');
     const devs = Store.filter('users', u => u.role === 'developer');
     const impTeam = Store.filter('users', u => u.role === 'implementation');
+    const projectHeads = Store.filter('users', u => u.role === 'project_head');
+    // All IT-side staff — used to populate the End User + Study Details name
+    // dropdowns (project heads, developers, implementation team, admin).
+    const itStaff = Store.filter('users', u => ['project_head', 'developer', 'implementation', 'admin'].includes(u.role));
 
     // Role visibility flags
     const isRequester = Auth.hasRole('requester');
@@ -1062,6 +1066,17 @@ const SCRManager = {
     const isPH = Auth.hasRole('project_head', 'admin');
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isAdmin = Auth.hasRole('admin');
+    // Roles that get the enhanced "dropdown + add custom name" controls
+    // across the New SCR form: Implementation, Internal Requester, Admin.
+    const isEnhanced = isImpl || isInternalReq || isAdmin;
+
+    // Reusable option lists for the name dropdowns.
+    // IT staff (name-valued) — for Received By, Coordinated By, Study Done By.
+    const itStaffNameOpts = itStaff.map(u => ({ value: u.name, label: u.name + ' — ' + Utils.getRoleLabel(u.role) }));
+    // Everyone (name-valued, with dept) — for the Requested By dropdown.
+    const allUserNameOpts = Store.getAll('users').map(u => ({ value: u.name, label: u.name + (u.department ? ` (${u.department})` : '') }));
+    // Project heads only (name-valued) — for the Project Head dropdown.
+    const phNameOpts = projectHeads.map(u => ({ value: u.name, label: u.name }));
     // Both roles use the self-service portal and only see their own SCRs;
     // use this flag wherever the *layout* (simplified header, hidden
     // approver bits) should match the regular Requester experience.
@@ -1205,9 +1220,9 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Requested By <span class="required">*</span></label>
-                ${isAdmin ? this._renderSelectWithOther({
+                ${isEnhanced ? this._renderSelectWithOther({
                   id: 'scr-requested-by',
-                  options: Store.getAll('users').map(u => ({ value: u.name, label: u.name + (u.department ? ` (${u.department})` : '') })),
+                  options: allUserNameOpts,
                   selectedValue: defaultRequestedBy,
                   placeholder: 'Select requester...',
                   allowOther: true,
@@ -1230,14 +1245,20 @@ const SCRManager = {
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Received By</label>
-                  <input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">
-                  <span class="form-hint">Auto-filled with the impl team member who accepts the request (Stage 1 → 2)</span>
+                  ${isEnhanced ? this._renderSelectWithOther({
+                    id: 'scr-received-by',
+                    options: itStaffNameOpts,
+                    selectedValue: scr.receivedBy || '',
+                    placeholder: 'Select IT staff...',
+                    allowOther: true
+                  }) : `<input type="text" class="form-input" id="scr-received-by" value="${Utils.escapeHtml(scr.receivedBy || '')}" placeholder="IT staff who received the request">`}
+                  <span class="form-hint">IT staff who received the request (project head / developer / implementation team)</span>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Coordinated By</label>
-                  ${isAdmin ? this._renderSelectWithOther({
+                  ${isEnhanced ? this._renderSelectWithOther({
                     id: 'scr-coordinated-by',
-                    options: Store.filter('users', u => u.role === 'implementation' || u.role === 'admin').map(u => ({ value: u.name, label: u.name })),
+                    options: itStaffNameOpts,
                     selectedValue: scr.coordinatedBy || '',
                     placeholder: 'Select coordinator...',
                     allowOther: true
@@ -1268,20 +1289,20 @@ const SCRManager = {
                 <label class="form-label">Study Done By (Primary)</label>
                 ${this._renderSelectWithOther({
                   id: 'scr-study-primary',
-                  options: impTeam.map(u => ({ value: u.name, label: u.name })),
+                  options: itStaffNameOpts,
                   selectedValue: defaultStudyPrimary,
                   placeholder: 'Select primary analyst...',
-                  allowOther: isAdmin
+                  allowOther: true
                 })}
               </div>
               <div class="form-group">
                 <label class="form-label">Study Done By (Secondary)</label>
                 ${this._renderSelectWithOther({
                   id: 'scr-study-secondary',
-                  options: impTeam.map(u => ({ value: u.name, label: u.name })),
+                  options: itStaffNameOpts,
                   selectedValue: scr.studyDoneBySecondary || '',
                   placeholder: 'Select secondary analyst...',
-                  allowOther: isAdmin
+                  allowOther: true
                 })}
               </div>
             </div>
@@ -1293,7 +1314,7 @@ const SCRManager = {
                   options: devs.map(d => ({ value: d.id, label: d.name })),
                   selectedValue: scr.assignedDeveloper || '',
                   placeholder: 'Select developer...',
-                  allowOther: isAdmin
+                  allowOther: true
                 })}
               </div>
               <div class="form-group">
@@ -1303,10 +1324,22 @@ const SCRManager = {
                   options: devs.map(d => ({ value: d.id, label: d.name })),
                   selectedValue: scr.assignedDeveloper2 || '',
                   placeholder: 'Select developer...',
-                  allowOther: isAdmin
+                  allowOther: true
                 })}
               </div>
             </div>
+            ${!isApprover ? `
+            <div class="form-group" style="max-width:400px">
+              <label class="form-label">Project Head</label>
+              ${this._renderSelectWithOther({
+                id: 'scr-ph-name',
+                options: phNameOpts,
+                selectedValue: scr.projectHeadName || '',
+                placeholder: 'Select project head...',
+                allowOther: true
+              })}
+            </div>
+            ` : ''}
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Study Date From</label>
@@ -1408,27 +1441,45 @@ const SCRManager = {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Study Done By (Primary)</label>
-                <input type="text" class="form-input" id="scr-study-primary" value="${Utils.escapeHtml(scr.studyDoneByPrimary || '')}" placeholder="Name of primary analyst">
+                ${this._renderSelectWithOther({
+                  id: 'scr-study-primary',
+                  options: itStaffNameOpts,
+                  selectedValue: scr.studyDoneByPrimary || '',
+                  placeholder: 'Select primary analyst...',
+                  allowOther: true
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">Study Done By (Secondary)</label>
-                <input type="text" class="form-input" id="scr-study-secondary" value="${Utils.escapeHtml(scr.studyDoneBySecondary || '')}" placeholder="Name of secondary analyst">
+                ${this._renderSelectWithOther({
+                  id: 'scr-study-secondary',
+                  options: itStaffNameOpts,
+                  selectedValue: scr.studyDoneBySecondary || '',
+                  placeholder: 'Select secondary analyst...',
+                  allowOther: true
+                })}
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Assigned Developer 1</label>
-                <select class="form-select" id="scr-developer">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper || '',
+                  placeholder: 'Select developer...',
+                  allowOther: true
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">Assigned Developer 2</label>
-                <select class="form-select" id="scr-developer2">
-                  <option value="">Select developer...</option>
-                  ${devs.map(d => `<option value="${d.id}" ${scr.assignedDeveloper2 === d.id ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
-                </select>
+                ${this._renderSelectWithOther({
+                  id: 'scr-developer2',
+                  options: devs.map(d => ({ value: d.id, label: d.name })),
+                  selectedValue: scr.assignedDeveloper2 || '',
+                  placeholder: 'Select developer...',
+                  allowOther: true
+                })}
               </div>
             </div>
             <div class="form-row">
@@ -1460,8 +1511,14 @@ const SCRManager = {
               </div>
             </div>
             <div class="form-group" style="max-width:400px;margin-top:var(--space-4)">
-              <label class="form-label">Project Head Name</label>
-              <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Mr. Panneer Selvan')}" placeholder="Project Head full name">
+              <label class="form-label">Project Head</label>
+              ${this._renderSelectWithOther({
+                id: 'scr-ph-name',
+                options: phNameOpts,
+                selectedValue: scr.projectHeadName || '',
+                placeholder: 'Select project head...',
+                allowOther: true
+              })}
             </div>
           </div>
         </div>
@@ -1507,8 +1564,14 @@ const SCRManager = {
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Project Head Name</label>
-                <input type="text" class="form-input" id="scr-ph-name" value="${Utils.escapeHtml(scr.projectHeadName || 'Mr. Panneer Selvan')}" placeholder="Project Head full name">
+                <label class="form-label">Project Head</label>
+                ${this._renderSelectWithOther({
+                  id: 'scr-ph-name',
+                  options: phNameOpts,
+                  selectedValue: scr.projectHeadName || '',
+                  placeholder: 'Select project head...',
+                  allowOther: true
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">AGM – IT Name</label>

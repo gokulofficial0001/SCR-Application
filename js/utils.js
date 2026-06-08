@@ -13,8 +13,8 @@ const Utils = {
   },
 
   // ── SCR number = highest existing + 1 ──────────────────
-  // The real-world paper SCR series is at #145, so the system continues
-  // from 146. Scans every existing SCR's scrNumber, takes the highest
+  // The real-world paper SCR series is at #146, so the system continues
+  // from 147. Scans every existing SCR's scrNumber, takes the highest
   // pure-numeric value, returns max+1. To shift the start later, change
   // SCR_SERIES_START.
   //
@@ -22,7 +22,7 @@ const Utils = {
   // generated number fills that gap (e.g. delete 148 -> next create is
   // 148 again). The series follows the last EXISTING number, not a
   // historical high-water mark.
-  SCR_SERIES_START: 146,
+  SCR_SERIES_START: 147,
 
   generateSCRNumber() {
     let maxSeq = this.SCR_SERIES_START - 1;  // floor: first generated = SERIES_START
