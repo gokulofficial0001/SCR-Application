@@ -1056,8 +1056,9 @@ const SCRManager = {
     const impTeam = Store.filter('users', u => u.role === 'implementation');
     const projectHeads = Store.filter('users', u => u.role === 'project_head');
     // All IT-side staff — used to populate the End User + Study Details name
-    // dropdowns (project heads, developers, implementation team, admin).
-    const itStaff = Store.filter('users', u => ['project_head', 'developer', 'implementation', 'admin'].includes(u.role));
+    // dropdowns (project heads, developers, implementation team). The admin
+    // account ("System Admin") is intentionally excluded from these lists.
+    const itStaff = Store.filter('users', u => ['project_head', 'developer', 'implementation'].includes(u.role));
 
     // Role visibility flags
     const isRequester = Auth.hasRole('requester');
@@ -1073,8 +1074,9 @@ const SCRManager = {
     // Reusable option lists for the name dropdowns.
     // IT staff (name-valued) — for Received By, Coordinated By, Study Done By.
     const itStaffNameOpts = itStaff.map(u => ({ value: u.name, label: u.name + ' — ' + Utils.getRoleLabel(u.role) }));
-    // Everyone (name-valued, with dept) — for the Requested By dropdown.
-    const allUserNameOpts = Store.getAll('users').map(u => ({ value: u.name, label: u.name + (u.department ? ` (${u.department})` : '') }));
+    // Everyone except the admin account (name-valued, with dept) — for the
+    // Requested By dropdown. "System Admin" is excluded from the dropdown.
+    const allUserNameOpts = Store.getAll('users').filter(u => u.role !== 'admin').map(u => ({ value: u.name, label: u.name + (u.department ? ` (${u.department})` : '') }));
     // Project heads only (name-valued) — for the Project Head dropdown.
     const phNameOpts = projectHeads.map(u => ({ value: u.name, label: u.name }));
     // Both roles use the self-service portal and only see their own SCRs;
