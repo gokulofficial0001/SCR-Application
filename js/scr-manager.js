@@ -9,6 +9,7 @@ const SCRManager = {
     status: 'all',            // 'all' | 'Open' | 'In Progress' | ... | comma-separated like 'Closed,Completed'
     priority: 'all',
     department: 'all',
+    requestType: 'all',       // 'all' | 'New' | 'Modification' | 'Report' | 'Other'
     assignedDeveloper: 'all', // filter by developer ID
     slaStatus: 'all'          // 'all' | 'breached' | 'at-risk' | 'on-track'
   },
@@ -20,6 +21,7 @@ const SCRManager = {
       status: 'all',
       priority: 'all',
       department: 'all',
+      requestType: 'all',
       assignedDeveloper: 'all',
       slaStatus: 'all',
       ...newFilters
@@ -168,15 +170,22 @@ const SCRManager = {
   // ── Get filtered SCRs ──────────────────────────────────
   getFiltered() {
     let scrs = Store.getAll('scr_requests');
-    const { search, status, priority, department, assignedDeveloper, slaStatus } = this.filters;
+    const { search, status, priority, department, requestType, assignedDeveloper, slaStatus } = this.filters;
 
     if (search) {
       const q = search.toLowerCase();
-      scrs = scrs.filter(s =>
-        s.scrNumber.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.department.toLowerCase().includes(q)
-      );
+      // Search across every field shown on the New SCR form so any value can be found.
+      scrs = scrs.filter(s => {
+        const hay = [
+          s.scrNumber, s.moduleName, s.description, s.department, s.hodName,
+          s.requestType, s.priority, s.intervention, s.status,
+          s.requestedBy, s.receivedBy, s.coordinatedBy,
+          s.studyDoneByPrimary, s.studyDoneBySecondary,
+          s.assignedDeveloper, s.assignedDeveloper2,
+          s.projectHeadName, s.agmItName, s.cioName
+        ].map(v => String(v == null ? '' : v).toLowerCase()).join(' | ');
+        return hay.includes(q);
+      });
     }
     // Status supports comma-separated list (e.g. 'Closed,Completed' for all finished SCRs)
     if (status && status !== 'all') {
@@ -185,6 +194,7 @@ const SCRManager = {
     }
     if (priority !== 'all')  scrs = scrs.filter(s => s.priority === priority);
     if (department !== 'all') scrs = scrs.filter(s => s.department === department);
+    if (requestType && requestType !== 'all') scrs = scrs.filter(s => s.requestType === requestType);
 
     if (assignedDeveloper && assignedDeveloper !== 'all') {
       scrs = scrs.filter(s => s.assignedDeveloper === assignedDeveloper || s.assignedDeveloper2 === assignedDeveloper);
@@ -260,9 +270,16 @@ const SCRManager = {
       <div class="filter-bar">
         <div class="search-bar" style="flex:1;max-width:300px">
           <span class="search-icon">🔍</span>
-          <input type="text" class="form-input" id="scr-search" placeholder="Search SCRs..." 
+          <input type="text" class="form-input" id="scr-search" placeholder="Search module, requester, SCR#…"
             value="${Utils.escapeHtml(this.filters.search)}" oninput="SCRManager.handleFilter()">
         </div>
+        <select class="form-select" id="filter-type" style="width:150px" onchange="SCRManager.handleFilter()">
+          <option value="all">All Types</option>
+          <option value="New" ${this.filters.requestType === 'New' ? 'selected' : ''}>New Development</option>
+          <option value="Modification" ${this.filters.requestType === 'Modification' ? 'selected' : ''}>Modification</option>
+          <option value="Report" ${this.filters.requestType === 'Report' ? 'selected' : ''}>Report</option>
+          <option value="Other" ${this.filters.requestType === 'Other' ? 'selected' : ''}>Other</option>
+        </select>
         <select class="form-select" id="filter-status" style="width:140px" onchange="SCRManager.handleFilter()">
           <option value="all">All Status</option>
           <option value="Open" ${this.filters.status === 'Open' ? 'selected' : ''}>Open</option>
@@ -282,10 +299,20 @@ const SCRManager = {
           <option value="all">All Departments</option>
           ${depts.map(d => `<option value="${Utils.escapeHtml(d.name)}" ${this.filters.department === d.name ? 'selected' : ''}>${Utils.escapeHtml(d.name)}</option>`).join('')}
         </select>
-        <span class="text-sm text-tertiary">${scrs.length} results</span>
+        <span class="text-sm text-tertiary" id="scr-count">${scrs.length} results</span>
       </div>
 
-      ${scrs.length === 0 ? `
+      <div id="scr-results">${this._renderResults(scrs)}</div>
+    `;
+  },
+
+  // ── Results-only HTML (empty state OR table) ────────────
+  // Rendered on its own so live search/filter can swap just this block
+  // without re-rendering the whole page. That keeps the search box and the
+  // cursor in place — no flicker, no "refresh" (instant-search behaviour).
+  _renderResults(scrs) {
+    if (scrs.length === 0) {
+      return `
         <div class="empty-state">
           <div class="empty-state-icon">📋</div>
           <h3 class="empty-state-title">No SCRs Found</h3>
@@ -293,8 +320,9 @@ const SCRManager = {
           ${Auth.canPerformAction('create_scr') ? `
             <button class="btn btn-primary mt-4" onclick="Router.navigate('scr-create')">+ New SCR</button>
           ` : ''}
-        </div>
-      ` : `
+        </div>`;
+    }
+    return `
         <div class="table-container">
           <table class="data-table" id="scr-table">
             <thead>
@@ -303,7 +331,7 @@ const SCRManager = {
                 <th>Type</th>
                 <th class="sortable">Priority</th>
                 <th>Department</th>
-                <th>Description</th>
+                <th>Module</th>
                 <th>Stage</th>
                 <th class="sortable">Status</th>
                 <th>SLA</th>
@@ -320,7 +348,7 @@ const SCRManager = {
                     <td>${Utils.badgeHtml(scr.requestType, 'neutral')}</td>
                     <td>${Utils.priorityBadge(scr.priority)}</td>
                     <td class="text-sm">${Utils.escapeHtml(scr.department)}</td>
-                    <td class="text-sm" style="max-width:250px">${Utils.escapeHtml(Utils.truncate(scr.description, 60))}</td>
+                    <td class="text-sm" style="max-width:220px">${Utils.escapeHtml(scr.moduleName || '—')}</td>
                     <td><span class="text-xs text-tertiary">${Utils.getStageName(scr.currentStage)}</span></td>
                     <td>${Utils.statusBadge(scr.status)} ${rej ? `<span title="${Utils.escapeHtml(rejTooltip)}" style="margin-left:4px;cursor:help" aria-label="Rejection remarks">⚠️</span>` : ''}</td>
                     <td>${SLAEngine.renderIndicator(scr)}</td>
@@ -330,22 +358,29 @@ const SCRManager = {
               }).join('')}
             </tbody>
           </table>
-        </div>
-      `}
-    `;
+        </div>`;
   },
 
   postRenderList() {
     // Any post-render setup
   },
 
-  // ── Filter handler ──────────────────────────────────────
+  // ── Filter handler (live, in-place — no full page re-render) ──
+  // Reads the current filter inputs, recomputes the matches, and swaps ONLY
+  // the results block + count. The search box is never re-created, so focus
+  // and the caret stay put while the user types (Google-style instant search).
   handleFilter() {
     this.filters.search = document.getElementById('scr-search')?.value || '';
     this.filters.status = document.getElementById('filter-status')?.value || 'all';
     this.filters.priority = document.getElementById('filter-priority')?.value || 'all';
     this.filters.department = document.getElementById('filter-dept')?.value || 'all';
-    Router.navigate('scr-list');
+    this.filters.requestType = document.getElementById('filter-type')?.value || 'all';
+
+    const scrs = this.getFiltered();
+    const results = document.getElementById('scr-results');
+    if (results) results.innerHTML = this._renderResults(scrs);
+    const count = document.getElementById('scr-count');
+    if (count) count.textContent = scrs.length + ' results';
   },
 
   // ── Render SCR Detail ──────────────────────────────────

@@ -60,7 +60,7 @@ const SelfService = {
                     <th>SCR #</th>
                     <th>Type</th>
                     <th>Priority</th>
-                    <th>Description</th>
+                    <th>Module</th>
                     <th>Status</th>
                     <th>Stage</th>
                     <th>Created</th>
@@ -76,7 +76,7 @@ const SelfService = {
                         <td class="font-semi text-brand">${scr.scrNumber}</td>
                         <td>${Utils.badgeHtml(scr.requestType, 'neutral')}</td>
                         <td>${Utils.priorityBadge(scr.priority)}</td>
-                        <td class="text-sm" style="max-width:200px">${Utils.escapeHtml(Utils.truncate(scr.description, 50))}</td>
+                        <td class="text-sm" style="max-width:200px">${Utils.escapeHtml(scr.moduleName || '—')}</td>
                         <td>${Utils.statusBadge(scr.status)}</td>
                         <td class="text-xs text-tertiary">${Utils.getStageName(scr.currentStage)}</td>
                         <td class="text-sm text-tertiary">${Utils.formatDate(scr.createdAt)}</td>

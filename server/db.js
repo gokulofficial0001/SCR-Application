@@ -130,4 +130,64 @@ for (const coll of ['workflow_stages', 'approvals', 'feedback', 'notifications',
 db.exec(`CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications (json_extract(data, '$.userId'));`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_users_username ON users (json_extract(data, '$.username'));`);
 
+// ── Friendly flattened views (for DBeaver / reporting tools) ──
+// Turn the JSON `data` column into clean, readable columns. These are
+// READ-ONLY and never affect the app — they just make the data easy to
+// browse and export in DBeaver/SQL tools. Created on every startup.
+db.exec(`CREATE VIEW IF NOT EXISTS scr_view AS SELECT
+  json_extract(data,'$.scrNumber') AS scr_number,
+  json_extract(data,'$.scrDate') AS scr_date,
+  json_extract(data,'$.requestType') AS request_type,
+  json_extract(data,'$.intervention') AS intervention,
+  json_extract(data,'$.priority') AS priority,
+  json_extract(data,'$.moduleName') AS module,
+  json_extract(data,'$.description') AS description,
+  json_extract(data,'$.requestedBy') AS requested_by,
+  json_extract(data,'$.department') AS department,
+  json_extract(data,'$.hodName') AS hod,
+  json_extract(data,'$.receivedBy') AS received_by,
+  json_extract(data,'$.coordinatedBy') AS coordinated_by,
+  json_extract(data,'$.studyDoneByPrimary') AS study_by_1,
+  json_extract(data,'$.studyDoneBySecondary') AS study_by_2,
+  json_extract(data,'$.assignedDeveloper') AS developer_1,
+  json_extract(data,'$.assignedDeveloper2') AS developer_2,
+  json_extract(data,'$.assignedOn') AS assigned_on,
+  json_extract(data,'$.studyDateFrom') AS study_from,
+  json_extract(data,'$.studyDateTo') AS study_to,
+  json_extract(data,'$.scheduleDate') AS schedule_date,
+  json_extract(data,'$.completedOn') AS completed_on,
+  json_extract(data,'$.projectHeadName') AS project_head,
+  json_extract(data,'$.agmItName') AS agm_it,
+  json_extract(data,'$.cioName') AS cio,
+  json_extract(data,'$.currentStage') AS stage,
+  json_extract(data,'$.status') AS status,
+  json_extract(data,'$.createdAt') AS created_at,
+  id
+FROM scr_requests`);
+
+db.exec(`CREATE VIEW IF NOT EXISTS users_view AS SELECT
+  json_extract(data,'$.name') AS name,
+  json_extract(data,'$.username') AS username,
+  json_extract(data,'$.role') AS role,
+  json_extract(data,'$.email') AS email,
+  json_extract(data,'$.department') AS department,
+  id
+FROM users`);
+
+db.exec(`CREATE VIEW IF NOT EXISTS departments_view AS SELECT
+  json_extract(data,'$.name') AS name,
+  json_extract(data,'$.hodName') AS hod,
+  json_extract(data,'$.hodEmail') AS hod_email,
+  id
+FROM departments`);
+
+db.exec(`CREATE VIEW IF NOT EXISTS feedback_view AS SELECT
+  json_extract(data,'$.scrId') AS scr_id,
+  json_extract(data,'$.rating') AS rating,
+  json_extract(data,'$.comment') AS comment,
+  json_extract(data,'$.submittedBy') AS submitted_by,
+  json_extract(data,'$.createdAt') AS created_at,
+  id
+FROM feedback`);
+
 module.exports = { db, COLLECTIONS, DB_PATH };

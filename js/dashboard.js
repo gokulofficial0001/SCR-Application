@@ -187,7 +187,7 @@ const Dashboard = {
                   </div>
                   <div class="activity-content">
                     <div class="activity-text">
-                      <strong>${scr.scrNumber}</strong> — ${Utils.escapeHtml(Utils.truncate(scr.description, 40))}
+                      <strong>${scr.scrNumber}</strong> — ${Utils.escapeHtml(scr.moduleName || Utils.truncate(scr.description, 40))}
                     </div>
                     <div class="activity-time">
                       <span onclick="event.stopPropagation();SCRManager.drillTo({department:'${String(scr.department).replace(/'/g,'\\\'')}'})" style="cursor:pointer;text-decoration:underline dotted" title="View dept">${Utils.escapeHtml(scr.department)}</span>

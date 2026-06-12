@@ -1262,15 +1262,13 @@ const Store = {
       // Development Team — 3 staff
       { id: 'user_dev1',   name: 'Mrs. Saranya R',       username: 'developer',    password: 'dev123',   role: 'developer',      email: 'saranya.r@hospital.in',       department: ITDept },
       { id: 'user_dev2',   name: 'Mr. Yoganandham S',    username: 'developer2',   password: 'dev123',   role: 'developer',      email: 'yoga@hospital.in',            department: ITDept },
-      { id: 'user_dev3',   name: 'Mr. Chakravarthy',     username: 'developer3',   password: 'dev123',   role: 'developer',      email: 'chakra@hospital.in',          department: ITDept },
-      // Requesters (departmental — kept for legacy)
-      { id: 'user_req1',   name: 'Dr. Ramesh Kumar',     username: 'requester',    password: 'req123',   role: 'requester',      email: 'ramesh@hospital.in',          department: 'Lab' },
-      { id: 'user_req2',   name: 'Dr. Priya Sharma',     username: 'requester2',   password: 'req123',   role: 'requester',      email: 'priya@hospital.in',           department: 'Radiology' },
-      { id: 'user_req3',   name: 'Mr. Ganesh Babu',      username: 'requester3',   password: 'req123',   role: 'requester',      email: 'ganesh@hospital.in',          department: 'Pharmacy' },
-      // Internal requester — IT-internal user who raises SCRs with the
-      // technical fields pre-filled (received-by, study details, dev
-      // assignment, PH name). Same self-service portal as Requester.
-      { id: 'user_internal_req', name: 'Mr. Vignesh Kumaran', username: 'internal',  password: 'int123',   role: 'internal_requester', email: 'vignesh@hospital.in',     department: 'IT' }
+      { id: 'user_dev3',   name: 'Mr. Chakravarthy',     username: 'developer3',   password: 'dev123',   role: 'developer',      email: 'chakra@hospital.in',          department: ITDept }
+      // NOTE: the demo requesters (requester / requester2 / requester3) and the
+      // demo internal_requester (internal / Mr. Vignesh Kumaran) are intentionally
+      // NOT auto-restored. This lets them be permanently deleted from the live
+      // master data. Only the core IT-staff accounts above are guaranteed to exist.
+      // The real internal requester account ("sof" / Software Team) is a normal
+      // user and is unaffected by this list.
     ];
 
     const existing = this._get('users') || [];

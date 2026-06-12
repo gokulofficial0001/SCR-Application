@@ -33,6 +33,16 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr "127.0.0.1:3500" ^| findstr "
     taskkill /F /PID %%a >nul 2>&1
 )
 
+REM If the port is STILL held after the kill, another instance (that we are
+REM not allowed to kill) already owns it. Do NOT start a second server and
+REM crash-loop - exit cleanly to avoid filling the log with errors.
+netstat -aon | findstr "127.0.0.1:3500" | findstr "LISTENING" >nul
+if not errorlevel 1 (
+    echo [%date% %time%] 127.0.0.1:3500 is already served by another process - this watchdog is exiting to avoid a conflict.
+    echo [%date% %time%] 127.0.0.1:3500 is already served by another process - this watchdog is exiting to avoid a conflict. >> watchdog.log
+    exit /b 0
+)
+
 echo.
 echo [%date% %time%] Starting SCR server [DEV localhost:3500]...
 echo [%date% %time%] Starting SCR server [DEV localhost:3500]... >> watchdog.log
