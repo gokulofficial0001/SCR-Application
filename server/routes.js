@@ -15,6 +15,10 @@ const ALLOWED_COLLS = new Set([
 
 const isValidColl = (c) => ALLOWED_COLLS.has(c);
 
+// Roles restricted to their OWN SCRs — enforced server-side (not just in the UI),
+// so the ownership rule can't be bypassed by calling the API directly.
+const SELF_ONLY_ROLES = new Set(['requester', 'internal_requester']);
+
 router.param('coll', (req, res, next, coll) => {
   if (!isValidColl(coll)) return res.status(404).json({ error: `Unknown collection: ${coll}` });
   next();
@@ -22,13 +26,19 @@ router.param('coll', (req, res, next, coll) => {
 
 router.get('/:coll', (req, res) => {
   const coll = req.params.coll;
-  const isAdmin = req.user?.role === 'admin';
+  const role = req.user?.role;
+  const isAdmin = role === 'admin';
   const rows = db.prepare(`SELECT data FROM ${coll}`).all();
-  res.json(rows.map(r => {
+  let out = rows.map(r => {
     const parsed = JSON.parse(r.data);
     if (coll === 'users' && !isAdmin) { delete parsed.password; }
     return parsed;
-  }));
+  });
+  // Ownership: requester / internal_requester only get their own SCRs (server-side).
+  if (coll === 'scr_requests' && SELF_ONLY_ROLES.has(role)) {
+    out = out.filter(s => s.createdBy === req.user.id);
+  }
+  res.json(out);
 });
 
 router.put('/:coll', (req, res) => {
@@ -52,10 +62,15 @@ router.put('/:coll', (req, res) => {
 
 router.get('/:coll/:id', (req, res) => {
   const coll = req.params.coll;
-  const isAdmin = req.user?.role === 'admin';
+  const role = req.user?.role;
+  const isAdmin = role === 'admin';
   const row = db.prepare(`SELECT data FROM ${coll} WHERE id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   const parsed = JSON.parse(row.data);
+  // Ownership: requester / internal_requester can only read their own SCRs.
+  if (coll === 'scr_requests' && SELF_ONLY_ROLES.has(role) && parsed.createdBy !== req.user.id) {
+    return res.status(403).json({ error: 'Forbidden: you can only view your own SCRs' });
+  }
   if (coll === 'users' && !isAdmin) { delete parsed.password; }
   res.json(parsed);
 });
@@ -85,6 +100,26 @@ router.patch('/:coll/:id', (req, res) => {
   const row = db.prepare(`SELECT data FROM ${coll} WHERE id = ?`).get(id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   const current = JSON.parse(row.data);
+
+  // ── Server-side write authorization for SCRs (mirrors the UI rules) ──
+  if (coll === 'scr_requests') {
+    const role = req.user?.role;
+    // Plain requesters have no edit rights at all.
+    if (role === 'requester') {
+      return res.status(403).json({ error: 'Forbidden: requesters cannot edit SCRs' });
+    }
+    // Internal requesters may edit only their OWN SCR, and only before the
+    // Implementation team accepts it (Stage 2).
+    if (role === 'internal_requester') {
+      const owns = current.createdBy === req.user.id;
+      const beforeStage2 = (current.currentStage || 1) < 2;
+      if (!owns || !beforeStage2) {
+        return res.status(403).json({ error: 'Forbidden: you can only edit your own SCR before it is accepted' });
+      }
+    }
+    // IT-side roles (impl, project_head, developer, agm_it, cio, admin) proceed.
+  }
+
   if (updates._expectedUpdatedAt && current.updatedAt && current.updatedAt !== updates._expectedUpdatedAt) {
     return res.status(409).json({ error: 'Conflict: record was updated by another user. Please refresh and retry.' });
   }
@@ -99,6 +134,10 @@ router.delete('/:coll/:id', (req, res) => {
   const coll = req.params.coll;
   const id = req.params.id;
   if (coll === 'scr_requests') {
+    // Only admin may delete an SCR (and its child records).
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: only admin can delete SCRs' });
+    }
     const tx = db.transaction(() => {
       db.prepare(`DELETE FROM ${coll} WHERE id = ?`).run(id);
       for (const child of CASCADE_ON_SCR_DELETE) {
@@ -135,15 +174,22 @@ metaRoutes.delete('/:key', (req, res) => {
 const adminRoutes = express.Router();
 
 adminRoutes.get('/snapshot', (req, res) => {
-  const isAdmin = req.user?.role === 'admin';
+  const role = req.user?.role;
+  const isAdmin = role === 'admin';
+  const selfOnly = SELF_ONLY_ROLES.has(role);
   const out = {};
   for (const coll of COLLECTIONS) {
     const rows = db.prepare(`SELECT data FROM ${coll}`).all();
-    out[coll] = rows.map(r => {
+    let arr = rows.map(r => {
       const parsed = JSON.parse(r.data);
       if (coll === 'users' && !isAdmin) { delete parsed.password; }
       return parsed;
     });
+    // Requester / internal_requester hydrate only their own SCRs.
+    if (coll === 'scr_requests' && selfOnly) {
+      arr = arr.filter(s => s.createdBy === req.user.id);
+    }
+    out[coll] = arr;
   }
   const metaRows = db.prepare(`SELECT key, data FROM meta`).all();
   out._meta = {};
