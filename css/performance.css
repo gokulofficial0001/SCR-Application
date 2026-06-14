@@ -707,3 +707,30 @@ body {
   /* Animation ends → will-change auto-cleared by animation-fill-mode both */
   animation-fill-mode: both;
 }
+
+/* ══════════════════════════════════════════════════════════
+   35. MOTION POLISH — scroll-reveal (subtle, premium)
+   Driven by js/motion.js. Blocks start hidden ONLY when the
+   .mo-reveal class is added by JS, so if JS never runs the
+   content is fully visible (progressive enhancement). The
+   classes are removed after the entrance so hover/other
+   transitions keep working.
+   ══════════════════════════════════════════════════════════ */
+
+.mo-reveal {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  will-change: opacity, transform;
+}
+
+.mo-reveal.mo-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 0.55s var(--ease-butter),
+    transform 0.6s var(--ease-butter);
+  transition-delay: var(--mo-delay, 0ms);
+}
+
+/* KPI numbers feel "alive" while counting up */
+.kpi-value { font-variant-numeric: tabular-nums; }

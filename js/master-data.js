@@ -81,7 +81,6 @@ const MasterData = {
               <tr>
                 <th>Name</th>
                 <th>Username</th>
-                <th>Password</th>
                 <th>Role</th>
                 <th>Email</th>
                 <th>Department</th>
@@ -98,18 +97,6 @@ const MasterData = {
                     </div>
                   </td>
                   <td class="text-sm" style="font-family:monospace">${Utils.escapeHtml(u.username)}</td>
-                  <td class="text-sm" style="font-family:monospace;white-space:nowrap">
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <span class="pw-mask" style="letter-spacing:2px;color:var(--color-text-muted)">••••••••</span>
-                      <span class="pw-plain hidden" style="color:var(--color-text-primary)">${Utils.escapeHtml(u.password || '—')}</span>
-                      <button type="button" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--color-text-muted);line-height:1" title="Show / hide password"
-                        onclick="MasterData.togglePw(this)">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
                   <td>${Utils.badgeHtml(Utils.getRoleLabel(u.role), 'info')}</td>
                   <td class="text-sm text-tertiary">${Utils.escapeHtml(u.email)}</td>
                   <td class="text-sm">${Utils.escapeHtml(u.department)}</td>
@@ -311,14 +298,14 @@ const MasterData = {
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Password${isEdit ? '' : ' <span class="required">*</span>'}</label>
+              <label class="form-label">${isEdit ? 'Reset Password' : 'Password'}${isEdit ? '' : ' <span class="required">*</span>'}</label>
               <div class="pw-wrapper">
                 <input type="password" class="form-input" id="user-password"
-                       value="${Utils.escapeHtml(user.password || '')}"
-                       placeholder="${isEdit ? 'Leave blank to keep current password' : 'At least 4 characters'}"
+                       value=""
+                       placeholder="${isEdit ? 'Leave blank to keep current — or type a new one to reset' : 'At least 4 characters'}"
                        maxlength="60" autocomplete="new-password">
                 <button type="button" class="pw-toggle" id="modal-pw-toggle"
-                        aria-label="Show password" title="Show / hide password"
+                        aria-label="Show password" title="Show / hide what you type"
                         onclick="MasterData._toggleModalPw()">
                   <svg id="modal-eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -329,7 +316,7 @@ const MasterData = {
                   </svg>
                 </button>
               </div>
-              <span class="form-hint">${isEdit ? 'Current password shown. Change it or leave as-is.' : 'Min 4 characters'}</span>
+              <span class="form-hint">${isEdit ? 'Passwords are encrypted and cannot be viewed. Type a new one here to reset it.' : 'Min 4 characters'}</span>
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
@@ -364,7 +351,7 @@ const MasterData = {
     const originals = {
       'user-name':     user.name || '',
       'user-username': user.username || '',
-      'user-password': user.password || '',
+      'user-password': '',   // always blank — passwords are write-only (reset, never shown)
       'user-email':    user.email || '',
       'user-role':     user.role || (roles[0] || ''),
       'user-dept':     user.department || (depts[0]?.name || '')
@@ -413,15 +400,6 @@ const MasterData = {
     input.type = show ? 'text' : 'password';
     open.classList.toggle('hidden',  show);
     closed.classList.toggle('hidden', !show);
-  },
-
-  togglePw(btn) {
-    const wrap = btn.closest('div');
-    const mask  = wrap.querySelector('.pw-mask');
-    const plain = wrap.querySelector('.pw-plain');
-    const showing = !plain.classList.contains('hidden');
-    mask.classList.toggle('hidden',  !showing);
-    plain.classList.toggle('hidden',  showing);
   },
 
   async deleteUser(id) {

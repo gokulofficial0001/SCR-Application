@@ -12,6 +12,7 @@ const App = {
   // a token is in hand, or the call 401s and the app shows an error.
   async init() {
     this._bindStorageSync();   // idempotent — first thing so cross-tab works
+    this.mountEnvBadge();      // DEV/LIVE identifier — visible on every screen
 
     const session = Auth.currentUser();
     if (session && session.token) {
@@ -23,6 +24,36 @@ const App = {
       Store.setAuthToken(null);
     }
     this.renderLogin();
+  },
+
+  // ── Environment identifier (DEV vs LIVE) ────────────────
+  // Detects the environment from the hostname so you can always tell which
+  // instance you're looking at — like the "● LIVE" badge on a broadcast.
+  env() {
+    const h = window.location.hostname;
+    if (h === '10.10.1.26') return { id: 'LIVE', label: 'LIVE', cls: 'env-live' };
+    if (h === 'localhost' || h === '127.0.0.1') return { id: 'DEV', label: 'DEV', cls: 'env-dev' };
+    return { id: 'OTHER', label: (h || 'APP').toUpperCase(), cls: 'env-other' };
+  },
+
+  mountEnvBadge() {
+    try {
+      const e = this.env();
+      document.title = `[${e.label}] SCR System`;   // tells browser tabs apart
+      let badge = document.getElementById('env-badge');
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'env-badge';
+        document.body.appendChild(badge);
+      }
+      badge.className = 'env-badge ' + e.cls;
+      badge.innerHTML = e.id === 'LIVE'
+        ? '<span class="env-dot"></span>LIVE'
+        : (e.id === 'DEV' ? 'DEV' : (typeof Utils !== 'undefined' ? Utils.escapeHtml(e.label) : e.label));
+      badge.title = e.id === 'LIVE'
+        ? 'PRODUCTION — real data, used by the team'
+        : (e.id === 'DEV' ? 'Development / testing copy' : 'Accessed via ' + e.label);
+    } catch (_) { /* badge is cosmetic — never break boot */ }
   },
 
   // ── Full boot (only after a valid session) ──────────────

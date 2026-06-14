@@ -146,6 +146,12 @@ const Router = {
           Feedback.postRender();
           break;
       }
+
+      // Professional motion polish: reveal blocks on scroll + count-up KPIs
+      if (typeof Motion !== 'undefined') {
+        Motion.reveal(contentArea);
+        Motion.countUp(contentArea);
+      }
     }, 80);
   },
 

@@ -56,8 +56,20 @@ router.post('/login', (req, res) => {
   const result = verifyPassword(password, user.password);
   if (!result.ok) return res.status(401).json({ error: 'Invalid username or password' });
 
-  // Auto-upgrade to bcrypt is intentionally disabled.
-  // Passwords are stored in plaintext so admins can read them in Master Data.
+  // Lazy migration: if the stored password was still plaintext (legacy),
+  // upgrade it to a bcrypt hash on this successful login, so the database
+  // moves to hashed-only over time without forcing anyone to reset.
+  if (result.needsUpgrade) {
+    try {
+      user.password = hashPassword(password);
+      user.updatedAt = nowISO();
+      db.prepare('UPDATE users SET data = ?, updated_at = ? WHERE id = ?')
+        .run(JSON.stringify(user), user.updatedAt, row.id);
+    } catch (e) {
+      console.error('Password upgrade failed for', user.username, e.message);
+      // Don't fail the login over an upgrade glitch — they're in.
+    }
+  }
 
   clearExpiredSessions();
 
