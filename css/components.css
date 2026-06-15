@@ -2592,43 +2592,81 @@
   letter-spacing: 0.01em;
 }
 
-/* ── Environment identifier badge (DEV / LIVE) ──────────────── */
-/* Fixed, always-visible pill so you instantly know which instance
-   you're on. Red "● LIVE" (broadcast style) vs amber "DEV". */
-#env-badge.env-badge {
+/* ── Environment indicator (DEV / LIVE) ─────────────────────── */
+/* STATIC label — shows which instance you're on. Top-right of the header
+   on the app; fixed top-right on the login screen. Red "● LIVE" (broadcast
+   style) vs amber "DEV". Not clickable. */
+#env-badge {
   position: fixed;
-  bottom: 14px;
-  right: 16px;
+  top: 14px;
+  right: 18px;
   z-index: 99999;
+}
+.env-tag {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 14px;
+  gap: 6px;
+  padding: 5px 14px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  pointer-events: none;   /* never blocks clicks */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   user-select: none;
+  white-space: nowrap;
+  pointer-events: auto;   /* receive hover only — there is NO click action */
+  cursor: default;        /* arrow, not a pointer — it's not a button */
+  overflow: hidden;
+  transition: box-shadow 0.25s ease, transform 0.2s ease, filter 0.2s ease;
 }
-#env-badge.env-live {
-  background: linear-gradient(135deg, #ef4444, #b91c1c);
+/* glossy highlight across the top half */
+.env-tag::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 50% 0;
+  background: linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
+  pointer-events: none;
 }
-#env-badge.env-dev {
-  background: linear-gradient(135deg, #f59e0b, #c2710c);
+.env-tag.env-live {
+  background: linear-gradient(135deg, #f43f5e, #b91c1c);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(244, 63, 94, 0.45);
+  animation: env-live-glow 2s ease-in-out infinite;
 }
-#env-badge.env-other {
+.env-tag.env-dev {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(34, 197, 94, 0.45), 0 0 12px rgba(34, 197, 94, 0.45);
+}
+.env-tag.env-other {
   background: linear-gradient(135deg, #64748b, #475569);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
-#env-badge .env-dot {
-  width: 8px;
-  height: 8px;
+
+/* Hover glow (visual only — clicking still does nothing) */
+.env-tag.env-dev:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(34, 197, 94, 0.7), 0 0 24px rgba(34, 197, 94, 0.9);
+}
+.env-tag.env-live:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);   /* box-shadow is driven by the breathing animation */
+}
+.env-tag .env-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
   animation: env-pulse 1.2s ease-in-out infinite;
+}
+/* LIVE quietly "breathes" a red glow — broadcast feel, no interaction */
+@keyframes env-live-glow {
+  0%, 100% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(244, 63, 94, 0.45), 0 0 8px rgba(239, 68, 68, 0.45); }
+  50%      { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(244, 63, 94, 0.6), 0 0 18px rgba(239, 68, 68, 0.85); }
 }
 @keyframes env-pulse {
   0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }

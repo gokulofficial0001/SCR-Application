@@ -40,20 +40,29 @@ const App = {
     try {
       const e = this.env();
       document.title = `[${e.label}] SCR System`;   // tells browser tabs apart
+      // Fixed top-right badge — used on the login screen (which has no header).
+      // On the app shell, renderShell() removes this and shows the button in
+      // the header instead.
       let badge = document.getElementById('env-badge');
       if (!badge) {
         badge = document.createElement('div');
         badge.id = 'env-badge';
         document.body.appendChild(badge);
       }
-      badge.className = 'env-badge ' + e.cls;
-      badge.innerHTML = e.id === 'LIVE'
-        ? '<span class="env-dot"></span>LIVE'
-        : (e.id === 'DEV' ? 'DEV' : (typeof Utils !== 'undefined' ? Utils.escapeHtml(e.label) : e.label));
-      badge.title = e.id === 'LIVE'
-        ? 'PRODUCTION — real data, used by the team'
-        : (e.id === 'DEV' ? 'Development / testing copy' : 'Accessed via ' + e.label);
+      badge.innerHTML = this.envBtnHtml();
     } catch (_) { /* badge is cosmetic — never break boot */ }
+  },
+
+  // The DEV / LIVE indicator. STATIC — just shows the current environment.
+  // Not a button, not clickable, never navigates anywhere.
+  envBtnHtml() {
+    const e = this.env();
+    const inner = e.id === 'LIVE'
+      ? '<span class="env-dot"></span>LIVE'
+      : (e.id === 'DEV' ? 'DEV' : (typeof Utils !== 'undefined' ? Utils.escapeHtml(e.label) : e.label));
+    const tip = e.id === 'LIVE' ? 'Live Mode'
+      : (e.id === 'DEV' ? 'Development Mode' : 'Environment: ' + e.label);
+    return `<span class="env-tag ${e.cls}" title="${tip}">${inner}</span>`;
   },
 
   // ── Full boot (only after a valid session) ──────────────
@@ -165,6 +174,10 @@ const App = {
   renderShell() {
     const user = Auth.currentUser();
     const isRequester = user.role === 'requester' || user.role === 'internal_requester';
+
+    // The app shell shows the env button in the header, so drop the
+    // login-screen's fixed badge if it's still around.
+    document.getElementById('env-badge')?.remove();
 
     document.getElementById('app').innerHTML = `
       <!-- Sidebar -->
@@ -278,6 +291,7 @@ const App = {
           <h1 class="header-title" id="header-title">Dashboard</h1>
         </div>
         <div class="header-right">
+          ${App.envBtnHtml()}
           <button class="notification-btn" onclick="Notifications.togglePanel()" aria-label="Notifications">
             🔔
             <span class="notif-count" id="notif-badge" style="display:none">0</span>
