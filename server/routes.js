@@ -83,10 +83,6 @@ router.post('/:coll', (req, res) => {
   const coll = req.params.coll;
   const item = req.body || {};
   if (!item.id) return res.status(400).json({ error: 'id required' });
-  // Never store a plaintext password — hash it before it touches the DB.
-  if (coll === 'users' && item.password && !isHashed(item.password)) {
-    item.password = hashPassword(item.password);
-  }
   item.createdAt = item.createdAt || nowISO();
   item.updatedAt = nowISO();
   const stmt = db.prepare(`INSERT INTO ${coll} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`);
@@ -132,10 +128,6 @@ router.patch('/:coll/:id', (req, res) => {
     return res.status(409).json({ error: 'Conflict: record was updated by another user. Please refresh and retry.' });
   }
   delete updates._expectedUpdatedAt; // remove before saving
-  // Hash a new/changed password (a "reset") before saving — never store plaintext.
-  if (coll === 'users' && updates.password && !isHashed(updates.password)) {
-    updates.password = hashPassword(updates.password);
-  }
   const merged = { ...current, ...updates, updatedAt: nowISO() };
   db.prepare(`UPDATE ${coll} SET data = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(merged), merged.updatedAt, id);
