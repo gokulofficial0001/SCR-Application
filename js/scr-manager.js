@@ -247,11 +247,14 @@ const SCRManager = {
           </div>
           <p class="page-description">Manage all software change requests</p>
         </div>
-        ${Auth.canPerformAction('create_scr') ? `
-          <button class="btn btn-primary" onclick="Router.navigate('scr-create')">
-            + New SCR
-          </button>
-        ` : ''}
+        <div class="flex items-center gap-2">
+          ${Auth.hasRole('implementation', 'admin') ? `
+            <button class="btn btn-outline" onclick="SCRManager.exportCsv()" title="Download the current list as a CSV file (opens in Excel / Google Sheets)">⬇ Export</button>
+          ` : ''}
+          ${Auth.canPerformAction('create_scr') ? `
+            <button class="btn btn-primary" onclick="Router.navigate('scr-create')">+ New SCR</button>
+          ` : ''}
+        </div>
       </div>
 
       ${activeChips.length > 0 ? `
@@ -381,6 +384,52 @@ const SCRManager = {
     if (results) results.innerHTML = this._renderResults(scrs);
     const count = document.getElementById('scr-count');
     if (count) count.textContent = scrs.length + ' results';
+  },
+
+  // ── Export the current (filtered) list to CSV ───────────
+  // Downloads in the browser — opens in Excel / Google Sheets. No data leaves
+  // the network; it's just the rows the user is already allowed to see.
+  exportCsv() {
+    const scrs = this.getFiltered();
+    if (!scrs.length) { Utils.toast('info', 'Nothing to export', 'No SCRs match the current filters.'); return; }
+
+    // resolve developer ids to names where possible (nicer than raw ids)
+    const devName = (v) => {
+      if (!v) return '';
+      const u = Store.getById('users', v);
+      return u ? u.name : v;
+    };
+    const cols = [
+      ['SCR #', s => s.scrNumber], ['Date', s => s.scrDate], ['Type', s => s.requestType],
+      ['Intervention', s => s.intervention], ['Priority', s => s.priority],
+      ['Module', s => s.moduleName], ['Description', s => s.description],
+      ['Requested By', s => s.requestedBy], ['Department', s => s.department], ['HOD', s => s.hodName],
+      ['Received By', s => s.receivedBy], ['Coordinated By', s => s.coordinatedBy],
+      ['Study By 1', s => s.studyDoneByPrimary], ['Study By 2', s => s.studyDoneBySecondary],
+      ['Developer 1', s => devName(s.assignedDeveloper)], ['Developer 2', s => devName(s.assignedDeveloper2)],
+      ['Assigned On', s => s.assignedOn], ['Study From', s => s.studyDateFrom], ['Study To', s => s.studyDateTo],
+      ['Schedule', s => s.scheduleDate], ['Completed', s => s.completedOn],
+      ['Project Head', s => s.projectHeadName], ['AGM-IT', s => s.agmItName], ['CIO', s => s.cioName],
+      ['Stage', s => Utils.getStageName(s.currentStage)], ['Status', s => s.status], ['Created', s => s.createdAt],
+    ];
+    const esc = (v) => {
+      const t = (v === null || v === undefined) ? '' : String(v);
+      return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const lines = [cols.map(c => esc(c[0])).join(',')];
+    scrs.forEach(s => lines.push(cols.map(c => esc(c[1](s))).join(',')));
+    const csv = '﻿' + lines.join('\r\n');   // BOM so Excel reads UTF-8 correctly
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'scr-export-' + Utils.today() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    Utils.toast('success', 'Exported', scrs.length + ' SCR' + (scrs.length === 1 ? '' : 's') + ' downloaded as CSV.');
   },
 
   // ── Render SCR Detail ──────────────────────────────────
