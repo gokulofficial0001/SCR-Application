@@ -249,7 +249,7 @@ const SCRManager = {
         </div>
         <div class="flex items-center gap-2">
           ${Auth.hasRole('implementation', 'admin') ? `
-            <button class="btn btn-outline" onclick="SCRManager.exportCsv()" title="Download the current list as a CSV file (opens in Excel / Google Sheets)">⬇ Export</button>
+            <button class="btn btn-outline" onclick="SCRManager.exportExcel()" title="Download the current list as an Excel (.xlsx) file">⬇ Export to Excel</button>
           ` : ''}
           ${Auth.canPerformAction('create_scr') ? `
             <button class="btn btn-primary" onclick="Router.navigate('scr-create')">+ New SCR</button>
@@ -386,10 +386,21 @@ const SCRManager = {
     if (count) count.textContent = scrs.length + ' results';
   },
 
-  // ── Export the current (filtered) list to CSV ───────────
-  // Downloads in the browser — opens in Excel / Google Sheets. No data leaves
-  // the network; it's just the rows the user is already allowed to see.
-  exportCsv() {
+  // ── Export the current (filtered) list to Excel (.xlsx) ──
+  // Lazy-loads the SheetJS library (js/xlsx.min.js) on first use so it never
+  // weighs down normal page loads. Purely a browser download — data stays
+  // internal; it's just the rows the user is already allowed to see.
+  exportExcel() {
+    const run = () => this._writeXlsx();
+    if (window.XLSX) return run();
+    const s = document.createElement('script');
+    s.src = 'js/xlsx.min.js';
+    s.onload = run;
+    s.onerror = () => Utils.toast('error', 'Export failed', 'Could not load the Excel library.');
+    document.head.appendChild(s);
+  },
+
+  _writeXlsx() {
     const scrs = this.getFiltered();
     if (!scrs.length) { Utils.toast('info', 'Nothing to export', 'No SCRs match the current filters.'); return; }
 
@@ -399,37 +410,48 @@ const SCRManager = {
       const u = Store.getById('users', v);
       return u ? u.name : v;
     };
-    const cols = [
-      ['SCR #', s => s.scrNumber], ['Date', s => s.scrDate], ['Type', s => s.requestType],
-      ['Intervention', s => s.intervention], ['Priority', s => s.priority],
-      ['Module', s => s.moduleName], ['Description', s => s.description],
-      ['Requested By', s => s.requestedBy], ['Department', s => s.department], ['HOD', s => s.hodName],
-      ['Received By', s => s.receivedBy], ['Coordinated By', s => s.coordinatedBy],
-      ['Study By 1', s => s.studyDoneByPrimary], ['Study By 2', s => s.studyDoneBySecondary],
-      ['Developer 1', s => devName(s.assignedDeveloper)], ['Developer 2', s => devName(s.assignedDeveloper2)],
-      ['Assigned On', s => s.assignedOn], ['Study From', s => s.studyDateFrom], ['Study To', s => s.studyDateTo],
-      ['Schedule', s => s.scheduleDate], ['Completed', s => s.completedOn],
-      ['Project Head', s => s.projectHeadName], ['AGM-IT', s => s.agmItName], ['CIO', s => s.cioName],
-      ['Stage', s => Utils.getStageName(s.currentStage)], ['Status', s => s.status], ['Created', s => s.createdAt],
-    ];
-    const esc = (v) => {
-      const t = (v === null || v === undefined) ? '' : String(v);
-      return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
-    };
-    const lines = [cols.map(c => esc(c[0])).join(',')];
-    scrs.forEach(s => lines.push(cols.map(c => esc(c[1](s))).join(',')));
-    const csv = '﻿' + lines.join('\r\n');   // BOM so Excel reads UTF-8 correctly
+    const num = (v) => (/^\d+$/.test(String(v)) ? Number(v) : (v || ''));
+    const rows = scrs.map(s => ({
+      'SCR #': num(s.scrNumber),
+      'Date': s.scrDate || '',
+      'Type': s.requestType || '',
+      'Intervention': s.intervention || '',
+      'Priority': s.priority || '',
+      'Module': s.moduleName || '',
+      'Description': s.description || '',
+      'Requested By': s.requestedBy || '',
+      'Department': s.department || '',
+      'HOD': s.hodName || '',
+      'Received By': s.receivedBy || '',
+      'Coordinated By': s.coordinatedBy || '',
+      'Study By 1': s.studyDoneByPrimary || '',
+      'Study By 2': s.studyDoneBySecondary || '',
+      'Developer 1': devName(s.assignedDeveloper),
+      'Developer 2': devName(s.assignedDeveloper2),
+      'Assigned On': s.assignedOn || '',
+      'Study From': s.studyDateFrom || '',
+      'Study To': s.studyDateTo || '',
+      'Schedule': s.scheduleDate || '',
+      'Completed': s.completedOn || '',
+      'Project Head': s.projectHeadName || '',
+      'AGM-IT': s.agmItName || '',
+      'CIO': s.cioName || '',
+      'Stage': Utils.getStageName(s.currentStage),
+      'Status': s.status || '',
+      'Created': (s.createdAt || '').slice(0, 10),
+    }));
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'scr-export-' + Utils.today() + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    Utils.toast('success', 'Exported', scrs.length + ' SCR' + (scrs.length === 1 ? '' : 's') + ' downloaded as CSV.');
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 7 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 10 }, { wch: 24 }, { wch: 44 },
+      { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      { wch: 18 }, { wch: 18 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 11 },
+      { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 11 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'SCRs');
+    XLSX.writeFile(wb, 'scr-export-' + Utils.today() + '.xlsx');
+    Utils.toast('success', 'Exported', scrs.length + ' SCR' + (scrs.length === 1 ? '' : 's') + ' exported to Excel.');
   },
 
   // ── Render SCR Detail ──────────────────────────────────
