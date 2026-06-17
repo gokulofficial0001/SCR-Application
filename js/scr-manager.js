@@ -121,8 +121,9 @@ const SCRManager = {
     const old = Store.getById('scr_requests', id);
     if (!old) return { success: false, error: 'SCR not found' };
 
-    // Guard: terminal states are read-only (except for post-closure workflow fields)
-    if (old.status === 'Closed' || old.status === 'Rejected') {
+    // Guard: terminal states are read-only — except admins may edit Closed SCRs
+    // (e.g. to correct or complete historical records). Rejected stays locked.
+    if (old.status === 'Rejected' || (old.status === 'Closed' && !Auth.hasRole('admin'))) {
       return { success: false, error: `Cannot edit an SCR in "${old.status}" state` };
     }
 
@@ -210,7 +211,15 @@ const SCRManager = {
       scrs = scrs.filter(s => s.createdBy === user.id);
     }
 
-    return scrs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Order by SCR number, highest (latest request) first. Falls back to
+    // createdAt when a number is missing/non-numeric so nothing drops out.
+    return scrs.sort((a, b) => {
+      const na = parseFloat(a.scrNumber), nb = parseFloat(b.scrNumber);
+      const aNum = !isNaN(na), bNum = !isNaN(nb);
+      if (aNum && bNum && na !== nb) return nb - na;
+      if (aNum !== bNum) return aNum ? -1 : 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
   },
 
   // ── Render SCR List ─────────────────────────────────────
@@ -494,7 +503,8 @@ const SCRManager = {
       && (scr.currentStage || 1) < 2;
     const canEdit = Auth.canPerformAction('edit_scr')
       && (currentUser.role !== 'internal_requester' || isInternalReqOwner)
-      && scr.status !== 'Closed' && scr.status !== 'Rejected';
+      && (scr.status !== 'Closed' || Auth.hasRole('admin'))   // admin may edit Closed SCRs
+      && scr.status !== 'Rejected';
     const hasFeedback = Store.filter('feedback', f => f.scrId === id).length > 0;
     const isApprover = Auth.hasRole('agm_it', 'cio', 'admin');
     const isImpl = Auth.hasRole('implementation', 'admin');
