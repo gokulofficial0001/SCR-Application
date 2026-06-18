@@ -152,7 +152,28 @@ const Router = {
         Motion.reveal(contentArea);
         Motion.countUp(contentArea);
       }
+
+      // Sticky headers: measure the (sticky) page header so data-table
+      // column headers can freeze exactly beneath it.
+      this._syncSticky();
     }, 80);
+  },
+
+  // Keep --sticky-page-header-h in sync with the current page header's real
+  // height so sticky table headers sit flush below it (no gap / no overlap).
+  _syncSticky() {
+    const ph = document.querySelector('#content-area .page-header');
+    const h = ph ? Math.round(ph.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--sticky-page-header-h', h + 'px');
+    // Re-measure on resize once (button rows can wrap → header height changes).
+    if (!this._stickyResizeBound) {
+      this._stickyResizeBound = true;
+      window.addEventListener('resize', () => {
+        const el = document.querySelector('#content-area .page-header');
+        const hh = el ? Math.round(el.getBoundingClientRect().height) : 0;
+        document.documentElement.style.setProperty('--sticky-page-header-h', hh + 'px');
+      });
+    }
   },
 
   // ── Settings page ───────────────────────────────────────
@@ -220,13 +241,28 @@ const Router = {
   },
 
   goBack() {
-    const prev = this.history.pop();
+    let prev = this.history.pop();
+    // Never send the user back INTO an edit/create form — that form is a
+    // transient editing state, not a place to land via Back.
+    while (prev && prev.page === 'scr-create') prev = this.history.pop();
     if (prev) {
       this.navigate(prev.page, prev.params, true);
     } else {
       // No history — fall back to user's default home
       this.navigate(Auth.getDefaultPage(), {}, true);
     }
+  },
+
+  // Navigate after a save/submit. The form the user just left must NOT stay
+  // in history (so Back doesn't reopen it), and if the editor was opened from
+  // this exact destination (e.g. detail → Edit → Save → detail) we drop that
+  // duplicate so one Back returns to the list the user came from.
+  navigateAfterSave(page, params = {}) {
+    const top = this.history[this.history.length - 1];
+    if (top && top.page === page && JSON.stringify(top.params || {}) === JSON.stringify(params || {})) {
+      this.history.pop();
+    }
+    this.navigate(page, params, true); // skipHistory: don't record the form
   },
 
   // Reusable back button — call from any page header

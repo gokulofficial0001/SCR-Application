@@ -1,0 +1,46 @@
+/* ============================================================
+   STICKY HEADERS
+   ------------------------------------------------------------
+   Freezes the page action header (Back / title / status / Edit /
+   Approve / … ) AND any data-table column headers while the page
+   content scrolls. Applies on every page, for every login/role.
+
+   Loaded LAST so these rules win the cascade.
+   ============================================================ */
+
+/* JS (Router._syncSticky) keeps this in sync with the real page-header
+   height per page; the fallback covers the first paint. */
+:root { --sticky-page-header-h: 76px; }
+
+/* ── Page header: freeze just below the fixed top app bar ───── */
+.page-header {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 45;                       /* above content + table headers */
+  background: var(--color-bg-deepest); /* opaque — matches page backdrop */
+  /* small cushion under the fixed bar + a divider so it reads as a bar */
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ── Data-table column headers: freeze right under the page header ──
+   The wrapper must not become a vertical scroll box, otherwise the
+   sticky thead is trapped inside it: `overflow-x: auto` forces
+   `overflow-y` to compute to `auto` too. Letting it overflow visibly
+   keeps the page (window) as the scroll context so the header can pin
+   to the viewport. Wide tables then scroll with the page horizontally. */
+.table-container {
+  overflow: visible;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: calc(var(--header-height) + var(--sticky-page-header-h));
+  z-index: 35;
+  background: var(--color-bg-surface); /* opaque so rows don't bleed through */
+}
+
+/* Keep the rounded top corners from clipping awkwardly now that the
+   container no longer clips its overflow. */
+.table-container { border-radius: var(--radius-lg); }

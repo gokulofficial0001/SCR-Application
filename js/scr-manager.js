@@ -2057,7 +2057,7 @@ const SCRManager = {
           });
         } else {
           Utils.toast('success', 'SCR Updated', `${result.scr.scrNumber} has been updated`);
-          Router.navigate('scr-detail', { id: editId });
+          Router.navigateAfterSave('scr-detail', { id: editId });
         }
       }
     } else {
@@ -2076,7 +2076,7 @@ const SCRManager = {
           });
         } else {
           Utils.toast('success', 'SCR Created', msg);
-          Router.navigate('scr-detail', { id: result.scr.id });
+          Router.navigateAfterSave('scr-detail', { id: result.scr.id });
         }
       }
     }
