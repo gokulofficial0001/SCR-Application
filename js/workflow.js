@@ -39,15 +39,19 @@ const Workflow = {
     return rule ? rule.advanceRoles.includes(user.role) : false;
   },
 
-  // ── Check if user can close at stage 6 ──────────────────
+  // ── Check if user can close the ticket ──────────────────
   canClose(scr) {
     const user = Auth.currentUser();
     if (!user) return false;
-    if (scr.currentStage !== 6) return false;
+    // Already terminal — nothing to close.
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    // Admin override: may close a ticket from ANY stage (even while On Hold),
+    // so the Close button always shows for admin on the SCR preview screen.
+    if (user.role === 'admin') return true;
+    // Everyone else: only at the QA & Closure stage, and not while on hold.
+    if (scr.currentStage !== 6) return false;
     if (scr.status === 'On Hold') return false;
-    const rule = this.stageRules[6];
-    return rule.advanceRoles.includes(user.role);
+    return this.stageRules[6].advanceRoles.includes(user.role);
   },
 
   // ── Check if user can reject current stage ───────────────
@@ -173,10 +177,12 @@ const Workflow = {
 
     const user = Auth.currentUser();
 
-    const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 6 && !w.exitedAt);
-    currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Closed' }));
+    // Exit whatever stage is currently open (normally stage 6; for an admin
+    // override-close from an earlier stage it exits that stage instead).
+    const openWf = Store.filter('workflow_stages', w => w.scrId === scrId && !w.exitedAt);
+    openWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Closed' }));
 
-    const closeResult = Store.update('scr_requests', scrId, { status: 'Closed', completedOn: Utils.today(), _expectedUpdatedAt: scr.updatedAt });
+    const closeResult = Store.update('scr_requests', scrId, { status: 'Closed', currentStage: 6, completedOn: Utils.today(), _expectedUpdatedAt: scr.updatedAt });
     if (closeResult && closeResult.conflict) {
       return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
     }
