@@ -39,12 +39,14 @@ const Workflow = {
     return rule ? rule.advanceRoles.includes(user.role) : false;
   },
 
-  // ── Check if user can close at stage 6 ──────────────────
+  // ── Check if user can close the SCR ─────────────────────
   canClose(scr) {
     const user = Auth.currentUser();
     if (!user) return false;
-    if (scr.currentStage !== 6) return false;
+    if (!Number.isInteger(scr.currentStage) || scr.currentStage < 1 || scr.currentStage > 6) return false;
     if (scr.status === 'Closed' || scr.status === 'Rejected') return false;
+    if (user.role === 'admin') return true;
+    if (scr.currentStage !== 6) return false;
     if (scr.status === 'On Hold') return false;
     const rule = this.stageRules[6];
     return rule.advanceRoles.includes(user.role);
@@ -160,7 +162,7 @@ const Workflow = {
     return { success: true, newStage };
   },
 
-  // ── Close ticket at stage 6 (QA approved) ───────────────
+  // ── Close ticket at the current stage ───────────────────
   closeTicket(scrId) {
     const scr = Store.getById('scr_requests', scrId);
     if (!scr) return { success: false, error: 'SCR not found' };
@@ -173,7 +175,7 @@ const Workflow = {
 
     const user = Auth.currentUser();
 
-    const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === 6 && !w.exitedAt);
+    const currentWf = Store.filter('workflow_stages', w => w.scrId === scrId && w.stage === scr.currentStage && !w.exitedAt);
     currentWf.forEach(w => Store.update('workflow_stages', w.id, { exitedAt: Utils.nowISO(), exitedBy: user.id, action: 'Closed' }));
 
     const closeResult = Store.update('scr_requests', scrId, { status: 'Closed', completedOn: Utils.today(), _expectedUpdatedAt: scr.updatedAt });
@@ -181,10 +183,10 @@ const Workflow = {
       return { success: false, error: 'This SCR was just updated by another user. Please refresh the page to see the latest status before proceeding.' };
     }
 
-    Audit.log('SCR', scrId, 'Ticket Closed', 'status', 'In Progress', 'Closed', user.name, user.role);
+    Audit.log('SCR', scrId, 'Ticket Closed', 'status', scr.status, 'Closed', user.name, user.role);
 
-    Notifications.create(scr.createdBy, `Your SCR ${scr.scrNumber} has been verified and closed`, 'status', scrId);
-    const closeMsg = `${scr.scrNumber} has been verified and closed by QA`;
+    Notifications.create(scr.createdBy, `Your SCR ${scr.scrNumber} has been closed`, 'status', scrId);
+    const closeMsg = `${scr.scrNumber} has been closed by ${user.name}`;
     if (scr.assignedDeveloper)  Notifications.create(scr.assignedDeveloper,  closeMsg, 'status', scrId);
     if (scr.assignedDeveloper2) Notifications.create(scr.assignedDeveloper2, closeMsg, 'status', scrId);
     Notifications.updateBadge();
