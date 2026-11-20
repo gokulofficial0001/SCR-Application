@@ -1,5 +1,6 @@
 const express = require('express');
 const { db, COLLECTIONS } = require('./db');
+const { allocateSCRNumber } = require('./scr-number');
 
 const router = express.Router();
 const nowISO = () => new Date().toISOString();
@@ -62,6 +63,42 @@ router.post('/:coll', (req, res) => {
   const coll = req.params.coll;
   const item = req.body || {};
   if (!item.id) return res.status(400).json({ error: 'id required' });
+
+  if (coll === 'scr_requests') {
+    const scr = { ...item };
+    scr.createdAt = scr.createdAt || nowISO();
+    scr.updatedAt = nowISO();
+
+    try {
+      const saved = db.transactionImmediate(() => {
+        const existing = db.prepare('SELECT data FROM scr_requests WHERE id = ?').get(scr.id);
+        if (existing) {
+          const existingSCR = JSON.parse(existing.data);
+          if (existingSCR.createdBy !== req.user?.id && req.user?.role !== 'admin') {
+            const err = new Error('Record already exists');
+            err.code = 'SCR_ID_CONFLICT';
+            throw err;
+          }
+          return existingSCR;
+        }
+
+        scr.scrNumber = allocateSCRNumber(db);
+        db.prepare('INSERT INTO scr_requests (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)')
+          .run(scr.id, JSON.stringify(scr), scr.createdAt, scr.updatedAt);
+        return scr;
+      })();
+      return res.json(saved);
+    } catch (err) {
+      if (err.code === 'SCR_ID_CONFLICT') {
+        return res.status(409).json({ error: 'Conflict: record already exists.' });
+      }
+      if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || (err.message && err.message.includes('UNIQUE'))) {
+        return res.status(409).json({ error: 'Conflict: record already exists. Use PATCH to update.' });
+      }
+      throw err;
+    }
+  }
+
   item.createdAt = item.createdAt || nowISO();
   item.updatedAt = nowISO();
   const stmt = db.prepare(`INSERT INTO ${coll} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`);

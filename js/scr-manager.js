@@ -35,9 +35,8 @@ const SCRManager = {
   },
 
   // ── Create SCR ──────────────────────────────────────────
-  createSCR(data) {
+  async createSCR(data) {
     const user = Auth.currentUser();
-    const scrNumber = Utils.generateSCRNumber();
 
     // Duplicate detection
     const existing = Store.getAll('scr_requests');
@@ -46,9 +45,9 @@ const SCRManager = {
       Utils.similarity(s.description, data.description) > 0.5
     );
 
-    const scr = Store.add('scr_requests', {
+    const saved = await Store.addSCR({
       // Section 1
-      scrNumber,
+      scrNumber: '',
       scrDate: Utils.today(),
       // Section 2
       requestType: data.requestType,
@@ -93,6 +92,7 @@ const SCRManager = {
       status: 'Open',
       createdBy: user.id
     });
+    const { scr, pending } = saved;
 
     // Create initial workflow entry
     Store.add('workflow_stages', {
@@ -106,12 +106,12 @@ const SCRManager = {
     });
 
     // Audit
-    Audit.log('SCR', scr.id, 'Created', null, null, scrNumber);
+    Audit.log('SCR', scr.id, 'Created', null, null, scr.scrNumber);
 
     // Notifications
     Notifications.notifySCRCreated(scr);
 
-    return { success: true, scr, duplicates: dupes };
+    return { success: true, scr, duplicates: dupes, pending };
   },
 
   // ── Update SCR ──────────────────────────────────────────
@@ -1748,7 +1748,7 @@ const SCRManager = {
   },
 
   // ── Form submit ─────────────────────────────────────────
-  handleSubmit(e, editId) {
+  async handleSubmit(e, editId) {
     e.preventDefault();
 
     // getVal handles both plain inputs/selects AND the "Other → free text"
@@ -1880,21 +1880,31 @@ const SCRManager = {
         }
       }
     } else {
-      result = this.createSCR(data);
+      try {
+        result = await this.createSCR(data);
+      } catch (error) {
+        console.error('SCR submission failed:', error);
+        Utils.toast('error', 'Submission Failed', error.message || 'The server could not save the SCR.');
+        return;
+      }
       if (result.success) {
-        let msg = `${result.scr.scrNumber} created successfully`;
+        let msg = result.pending
+          ? `Request queued offline. ${result.scr.scrNumber} is provisional and may change after sync.`
+          : `${result.scr.scrNumber} created successfully`;
         if (result.duplicates.length > 0) msg += ` (${result.duplicates.length} possible duplicates found)`;
 
         if (useSuccessModal && typeof SelfService !== 'undefined' && SelfService.showSuccessModal) {
           sessionStorage.removeItem('scr-new-tab-flow');
           SelfService.showSuccessModal({
-            icon: '🎉',
-            title: 'Your Request Has Been Submitted',
-            message: `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.${result.duplicates.length > 0 ? ` (Note: ${result.duplicates.length} similar requests already exist.)` : ''}`,
+            icon: result.pending ? '⏳' : '🎉',
+            title: result.pending ? 'Your Request Is Queued' : 'Your Request Has Been Submitted',
+            message: result.pending
+              ? `Saved locally. ${result.scr.scrNumber} is provisional; the server will assign the permanent number after sync.`
+              : `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.${result.duplicates.length > 0 ? ` (Note: ${result.duplicates.length} similar requests already exist.)` : ''}`,
             buttonLabel: 'Back to Home →'
           });
         } else {
-          Utils.toast('success', 'SCR Created', msg);
+          Utils.toast(result.pending ? 'warning' : 'success', result.pending ? 'Request Queued' : 'SCR Created', msg);
           Router.navigate('scr-detail', { id: result.scr.id });
         }
       }

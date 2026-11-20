@@ -74,6 +74,17 @@ const db = {
       throw e;
     }
   },
+  transactionImmediate: (fn) => (...args) => {
+    raw.exec('BEGIN IMMEDIATE');
+    try {
+      const out = fn(...args);
+      raw.exec('COMMIT');
+      return out;
+    } catch (e) {
+      try { raw.exec('ROLLBACK'); } catch {}
+      throw e;
+    }
+  },
   pragma: (stmt) => raw.exec(`PRAGMA ${stmt}`)
 };
 
@@ -100,6 +111,13 @@ for (const coll of COLLECTIONS) {
     );
   `);
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scr_number_sequence (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_number INTEGER NOT NULL
+  );
+`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS meta (
