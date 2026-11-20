@@ -12,19 +12,10 @@ const Utils = {
     return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
   },
 
-  // ── SCR number = highest existing + 1 ──────────────────
-  // The real-world paper SCR series is at #146, so the system continues
-  // from 147. Scans every existing SCR's scrNumber, takes the highest
-  // pure-numeric value, returns max+1. To shift the start later, change
-  // SCR_SERIES_START.
-  //
-  // Deletion behaviour: if the highest-numbered SCR is deleted, the next
-  // generated number fills that gap (e.g. delete 148 -> next create is
-  // 148 again). The series follows the last EXISTING number, not a
-  // historical high-water mark.
+  // Used only as a temporary display number when an SCR is queued offline.
   SCR_SERIES_START: 147,
 
-  generateSCRNumber() {
+  generateProvisionalSCRNumber() {
     let maxSeq = this.SCR_SERIES_START - 1;  // floor: first generated = SERIES_START
     Store.getAll('scr_requests').forEach(s => {
       const raw = (s && s.scrNumber != null) ? String(s.scrNumber).trim() : '';

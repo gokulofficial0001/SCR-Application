@@ -281,8 +281,22 @@ const Store = {
           this._persistQueue();
           continue;
         }
+        let savedSCR = null;
+        if (w.method === 'POST' && w.url === '/api/scr_requests') {
+          try {
+            savedSCR = await r.json();
+          } catch (e) {
+            console.error('Write-queue: server did not return the saved SCR:', e);
+            break;
+          }
+          if (!savedSCR || savedSCR.id !== w.body.id || !/^\d+$/.test(String(savedSCR.scrNumber || ''))) {
+            console.error('Write-queue: server returned an invalid SCR number; keeping the request queued.');
+            break;
+          }
+        }
         // success
         this._writeQueue.shift();
+        if (savedSCR) this._reconcileQueuedSCR(w.body, savedSCR);
         this._persistQueue();
         flushed++;
       }
@@ -372,6 +386,108 @@ const Store = {
     }
     this._notify(collection, 'add', item);
     return item;
+  },
+
+  async addSCR(item) {
+    if (!item.id) item.id = Utils.generateId();
+    if (!item.createdAt) item.createdAt = Utils.nowISO();
+    item.updatedAt = Utils.nowISO();
+    item.scrNumber = '';
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (this._authToken) headers['Authorization'] = `Bearer ${this._authToken}`;
+    let response;
+    try {
+      response = await fetch('/api/scr_requests', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(item)
+      });
+    } catch (e) {
+      return this._queueSCR(item, e);
+    }
+
+    if (response.status === 401) {
+      this._handle401();
+      const e = new Error('Authentication required');
+      e._noQueue = true;
+      throw e;
+    }
+    if (response.status === 403) {
+      if (typeof Utils !== 'undefined' && Utils.toast) {
+        Utils.toast('error', 'Not Allowed', 'You do not have permission for that action.');
+      }
+      const e = new Error('You do not have permission to submit this SCR.');
+      e._noQueue = true;
+      throw e;
+    }
+    if (response.status >= 400 && response.status < 500) {
+      const e = new Error(`POST /api/scr_requests -> ${response.status}`);
+      e._noQueue = true;
+      throw e;
+    }
+    if (!response.ok) {
+      return this._queueSCR(item, new Error(`POST /api/scr_requests -> ${response.status}`));
+    }
+
+    let saved;
+    try {
+      saved = await response.json();
+    } catch (e) {
+      return this._queueSCR(item, e);
+    }
+    if (!saved || saved.id !== item.id || !/^\d+$/.test(String(saved.scrNumber || ''))) {
+      throw new Error('The server did not return a valid assigned SCR number.');
+    }
+
+    const scrs = this._cache.scr_requests || (this._cache.scr_requests = []);
+    const index = scrs.findIndex(scr => scr.id === saved.id);
+    const oldItem = index >= 0 ? scrs[index] : null;
+    if (oldItem) scrs[index] = saved;
+    else scrs.push(saved);
+    this._notify('scr_requests', oldItem ? 'update' : 'add', saved, oldItem);
+    return { scr: saved, pending: false };
+  },
+
+  _queueSCR(item, error) {
+    item.scrNumber = Utils.generateProvisionalSCRNumber();
+    if (!this._cache.scr_requests) this._cache.scr_requests = [];
+    this._cache.scr_requests.push(item);
+    this._enqueueWrite('POST', '/api/scr_requests', item);
+    this._notify('scr_requests', 'add', item);
+    this._handleNetworkError(error);
+    return { scr: item, pending: true };
+  },
+
+  _reconcileQueuedSCR(queuedSCR, savedSCR) {
+    const scrs = this._cache.scr_requests || (this._cache.scr_requests = []);
+    const index = scrs.findIndex(scr => scr.id === savedSCR.id);
+    const oldItem = index >= 0 ? scrs[index] : null;
+    if (oldItem) scrs[index] = savedSCR;
+    else scrs.push(savedSCR);
+
+    const provisionalNumber = String(queuedSCR.scrNumber || '');
+    const assignedNumber = String(savedSCR.scrNumber);
+    if (provisionalNumber && provisionalNumber !== assignedNumber) {
+      const reconcileRelated = item => {
+        if (item.entityType === 'SCR' && item.entityId === savedSCR.id &&
+            item.action === 'Created' && item.newValue === provisionalNumber) {
+          item.newValue = assignedNumber;
+        }
+        if (item.scrId === savedSCR.id && typeof item.message === 'string') {
+          item.message = item.message.replace(provisionalNumber, assignedNumber);
+        }
+      };
+
+      ['audit_log', 'notifications'].forEach(collection => {
+        (this._cache[collection] || []).forEach(reconcileRelated);
+      });
+      this._writeQueue.forEach(write => {
+        if (write.body) reconcileRelated(write.body);
+      });
+    }
+    this._notify('scr_requests', oldItem ? 'update' : 'add', savedSCR, oldItem);
+    this._persistQueue();
   },
 
   // ── SCR Field Schema (all 10 sections) ─────────────────

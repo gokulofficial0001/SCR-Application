@@ -47,7 +47,7 @@ SCR FILES/
 
 **utils.js** — Shared helpers used by every other file
 - Date formatting: `formatDate`, `formatDateTime`, `formatTimeAgo`
-- ID generation: `generateId` (crypto.randomUUID), `generateSCRNumber` (regex-based sequence)
+- ID generation: `generateId` (crypto.randomUUID); SCR numbers are allocated transactionally by the server, with a client-side provisional number only while offline
 - Validation: `isNonEmpty`, `isValidDate`, `isDateRangeValid`, `isValidEmail`
 - UI helpers: `toast` (capped at 4 visible), `confirm` (promise-based dialog)
 - Security: `escapeHtml` — ALWAYS use this before rendering user input
@@ -251,7 +251,7 @@ Because later files win, theme-light.css and performance.css override everything
 | localStorage full error | store.js → `_set()` auto-prunes; check browser console |
 | Data corrupted / app won't load | store.js → `_get()` recovers + `migrate()` |
 | Old approver names showing | store.js → `migrate()` — bumps version, renames |
-| Duplicate SCR numbers | utils.js → `generateSCRNumber()` regex |
+| Duplicate SCR numbers | server/routes.js → transactional SCR-number allocation; inspect `scr_number_sequence` |
 | Session persists after delete | auth.js → `logout()` + Store.clearSession |
 
 ### UI Issues

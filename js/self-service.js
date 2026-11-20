@@ -416,7 +416,7 @@ const SelfService = {
     }
   },
 
-  handleQuickSubmit(e) {
+  async handleQuickSubmit(e) {
     e.preventDefault();
     const getVal = (id) => (document.getElementById(id)?.value || '').trim();
 
@@ -456,18 +456,33 @@ const SelfService = {
       if (dept) data.hodName = dept.hodName;
     }
 
-    const result = SCRManager.createSCR(data);
+    let result;
+    try {
+      result = await SCRManager.createSCR(data);
+    } catch (error) {
+      console.error('SCR submission failed:', error);
+      Utils.toast('error', 'Submission Failed', error.message || 'The server could not save the SCR.');
+      return;
+    }
     if (result.success) {
       const isMinimal = document.body.dataset.mode === 'minimal';
       if (isMinimal) {
         this.showSuccessModal({
-          icon: '🎉',
-          title: 'Your Request Has Been Submitted',
-          message: `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.`,
+          icon: result.pending ? '⏳' : '🎉',
+          title: result.pending ? 'Your Request Is Queued' : 'Your Request Has Been Submitted',
+          message: result.pending
+            ? `Saved locally. ${result.scr.scrNumber} is provisional; the server will assign the permanent number after sync.`
+            : `${result.scr.scrNumber} is now in our queue. Our IT team will review it and you'll be notified at each stage — from review to delivery.`,
           buttonLabel: 'Back to Home →'
         });
       } else {
-        Utils.toast('success', 'SCR Submitted! 🎉', `Your request ${result.scr.scrNumber} has been created`);
+        Utils.toast(
+          result.pending ? 'warning' : 'success',
+          result.pending ? 'Request Queued' : 'SCR Submitted! 🎉',
+          result.pending
+            ? `Saved locally. ${result.scr.scrNumber} is provisional and may change after sync.`
+            : `Your request ${result.scr.scrNumber} has been created`
+        );
         Router.navigate('self-service');
       }
     } else {

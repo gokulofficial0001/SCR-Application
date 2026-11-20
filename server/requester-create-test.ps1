@@ -1,5 +1,5 @@
 # Simulates EXACTLY what the frontend does when Requester 1 creates an SCR:
-#   SCRManager.createSCR()  ->  Store.add('scr_requests')   -> POST /api/scr_requests
+#   SCRManager.createSCR()  ->  Store.addSCR('scr_requests') -> POST /api/scr_requests
 #                               Store.add('workflow_stages')-> POST /api/workflow_stages
 #                               Audit.log()                 -> POST /api/audit_log
 #                               Notifications.notifySCRCreated() -> POST /api/notifications (x impl users)
@@ -36,10 +36,10 @@ $req1 = (GET 'users') | Where-Object { $_.username -eq 'requester' } | Select-Ob
 if (-not $req1) { FAIL "Requester 1 (username 'requester') not found in users" }
 OK "Requester 1 = '$($req1.name)' (id=$($req1.id), dept=$($req1.department))"
 
-# ---- build the SCR exactly like SCRManager.createSCR ----
+# ---- build the SCR payload like SCRManager.createSCR ----
 $ts = Get-Date
 $scrId = "id_" + ([guid]::NewGuid().ToString('N').Substring(0,16))
-$scrNumber = "SCR-TEST-" + $ts.ToString('HHmmss')
+$scrNumber = ''
 
 $scr = @{
   id = $scrId
@@ -79,7 +79,9 @@ $scr = @{
 STEP "1. POST /api/scr_requests"
 $r1 = POST 'scr_requests' $scr
 if ($r1.id -ne $scrId) { FAIL "POST scr_requests did not echo the id" }
-OK "Server accepted SCR $scrNumber (id=$scrId)"
+if ($r1.scrNumber -notmatch '^\d+$') { FAIL "Server did not assign a numeric SCR number" }
+$scrNumber = $r1.scrNumber
+OK "Server assigned SCR $scrNumber (id=$scrId)"
 
 # ---- 2. POST workflow_stages (Store.add) ----
 STEP "2. POST /api/workflow_stages"

@@ -87,7 +87,7 @@ STEP 1 "Requester creates SCR (Stage 1)"
 # =====================================================================
 
 $scrId = "scr_e2e_$([guid]::NewGuid().ToString('N').Substring(0,8))"
-$scrNumber = "SCR-2026-E2E1"
+$scrNumber = ''
 
 $scr = @{
   id = $scrId
@@ -140,7 +140,9 @@ $scr = @{
   holdAtStage = $null
   lastHold = $null
 }
-POST 'scr_requests' $scr | Out-Null
+$createdSCR = POST 'scr_requests' $scr
+if ($createdSCR.scrNumber -notmatch '^\d+$') { FAIL "Server did not assign a numeric SCR number" }
+$scrNumber = $createdSCR.scrNumber
 OK "Created $scrNumber at Stage 1, status=Open"
 
 $wf1 = @{ id="wf_e2e_1"; scrId=$scrId; stage=1; enteredAt=(NOW); exitedAt=$null; performedBy='user_req1'; action='Submitted'; notes='SCR submitted by Dr. Ramesh Kumar' }
