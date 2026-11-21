@@ -8,11 +8,11 @@ REM  URL         : http://localhost:3500/
 REM
 REM  This is the DEV environment. Edit code here, test on
 REM  http://localhost:3500, then run deploy-to-live.bat to push
-REM  the tested code to LIVE (10.10.1.26:3500).
+REM the tested code to LIVE (10.10.27.169:3500).
 REM
 REM  Self-restarting: if the server crashes it restarts in 5s.
 REM  IMPORTANT: this watchdog ONLY kills a stale process on
-REM  127.0.0.1:3500. It NEVER touches LIVE (10.10.1.26:3500).
+REM  127.0.0.1:3500. It NEVER touches LIVE (10.10.27.169:3500).
 REM ============================================================
 
 title SCR Server [DEV - localhost:3500] (keep open)
@@ -23,9 +23,22 @@ set "HOST=127.0.0.1"
 set "PORT=3500"
 set "SCR_ENV=DEVELOPMENT"
 
-REM Prefer the standard all-users Node path; fall back to PATH
-set "NODE=C:\Program Files\nodejs\node.exe"
-if not exist "%NODE%" set "NODE=node"
+REM The backend requires Node 22.5+ for the built-in node:sqlite module.
+REM Select the first available runtime that can load it; system Node may be older.
+set "NODE="
+for /f "delims=" %%N in ('where node.exe 2^>nul') do (
+    if not defined NODE call :try_node "%%N"
+)
+for /d %%D in ("%LOCALAPPDATA%\npm-cache\_npx\*") do (
+    if not defined NODE call :try_node "%%D\node_modules\node\bin\node.exe"
+)
+if not defined NODE (
+    echo ERROR: Node.js 22.5+ with node:sqlite is required.
+    echo Install Node.js 22.5 or newer, then restart this watchdog.
+    exit /b 1
+)
+for /f "delims=" %%V in ('"%NODE%" --version') do set "NODE_VERSION=%%V"
+echo Using %NODE_VERSION%: %NODE%
 
 :loop
 REM --- free ONLY 127.0.0.1:3500 from any stale/zombie process ---
@@ -53,3 +66,10 @@ echo [%date% %time%] DEV server stopped/crashed - restarting in 5 seconds...
 echo [%date% %time%] DEV server stopped/crashed - restarting in 5 seconds... >> watchdog.log
 timeout /t 5 /nobreak >nul
 goto loop
+
+:try_node
+if not exist "%~1" exit /b 0
+"%~1" -e "require('node:sqlite')" >nul 2>&1
+if errorlevel 1 exit /b 0
+set "NODE=%~1"
+exit /b 0

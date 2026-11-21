@@ -27,13 +27,12 @@ const App = {
   },
 
   // ── Environment identifier (DEV vs LIVE) ────────────────
-  // Detects the environment from the hostname so you can always tell which
-  // instance you're looking at — like the "● LIVE" badge on a broadcast.
+  // DEV is bound to loopback; the LAN-facing instance is LIVE.
   env() {
-    const h = window.location.hostname;
-    if (h === '10.10.1.26') return { id: 'LIVE', label: 'LIVE', cls: 'env-live' };
+    const h = window.location.hostname.toLowerCase();
     if (h === 'localhost' || h === '127.0.0.1') return { id: 'DEV', label: 'DEV', cls: 'env-dev' };
-    return { id: 'OTHER', label: (h || 'APP').toUpperCase(), cls: 'env-other' };
+    if (h) return { id: 'LIVE', label: 'LIVE', cls: 'env-live' };
+    return { id: 'OTHER', label: 'APP', cls: 'env-other' };
   },
 
   mountEnvBadge() {
@@ -58,10 +57,10 @@ const App = {
   envBtnHtml() {
     const e = this.env();
     const inner = e.id === 'LIVE'
-      ? '<span class="env-dot"></span>LIVE'
-      : (e.id === 'DEV' ? 'DEV' : (typeof Utils !== 'undefined' ? Utils.escapeHtml(e.label) : e.label));
-    const tip = e.id === 'LIVE' ? 'Live Mode'
-      : (e.id === 'DEV' ? 'Development Mode' : 'Environment: ' + e.label);
+      ? '<span class="env-dot"></span>LIVE - PRODUCTION'
+      : (e.id === 'DEV' ? 'DEV - DEVELOPMENT' : (typeof Utils !== 'undefined' ? Utils.escapeHtml(e.label) : e.label));
+    const tip = e.id === 'LIVE' ? 'Production environment'
+      : (e.id === 'DEV' ? 'Development environment' : 'Environment: ' + e.label);
     return `<span class="env-tag ${e.cls}" title="${tip}">${inner}</span>`;
   },
 

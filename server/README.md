@@ -67,12 +67,27 @@ it ever crashes**. Two pieces make this work:
 ### 1. `watchdog-server.bat` — the self-healing launcher
 
 A loop that:
-- Kills any stale/zombie process on port 3500 (fixes `EADDRINUSE`)
+- Clears a stale listener on DEV's `127.0.0.1:3500` only
+- Selects a Node runtime that can load `node:sqlite` before starting
 - Starts the Node server
 - If the server stops or crashes, waits 5s and restarts it — forever
 - Appends all output to `watchdog.log`
 
-You can double-click it any time to run the server manually.
+The DEV watchdog checks Node runtimes on `PATH` and in the local npm runtime
+cache. If none supports `node:sqlite` (Node.js 22.5+), it exits with an error
+instead of entering a restart loop.
+
+### Separate LIVE watchdog
+
+`watchdog-live-server.bat` binds only to `10.10.27.169:3500` and writes to
+`watchdog-live.log`. The existing `watchdog-server.bat` remains the DEV
+watchdog on `127.0.0.1:3500`. Each watcher leaves the other address alone.
+Both currently use this checkout's code and default database; separate
+watchdogs do not provide code or database isolation.
+
+Double-click `watchdog-server.bat` to start DEV or
+`watchdog-live-server.bat` to start LIVE. Starting LIVE is intentionally
+separate; the DEV watchdog never starts or stops it.
 
 ### 2. Startup-folder shortcut — auto-start on logon
 
